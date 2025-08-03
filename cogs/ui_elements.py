@@ -51,35 +51,20 @@ class SaveProfileView(discord.ui.View):
         await interaction.response.send_modal(modal)
 
 class WorldviewSelectView(discord.ui.View):
-    def __init__(self, worldviews: list, callback_command: str):
+    def __init__(self, worldviews: list):
         super().__init__(timeout=180)
-        self.callback_command = callback_command
         
         options = [discord.SelectOption(label=name) for name in worldviews]
         self.select = discord.ui.Select(placeholder="세계관을 선택하세요...", options=options, custom_id="worldview_select")
-        self.select.callback = self.on_select
         self.add_item(self.select)
 
-    async def on_select(self, interaction: discord.Interaction):
-        selected_worldview = self.select.values[0]
-        # 선택된 세계관으로 원래 명령어를 다시 호출하는 것처럼 처리 (실제 구현은 각 cog에서)
-        # 예: /start worldview={selected_worldview}
-        await interaction.response.defer() # 응답을 다음 단계로 넘김
-        # 이 View를 호출한 곳에서 followup을 통해 응답을 처리해야 함
-
 class ProfileSelectView(discord.ui.View):
-    def __init__(self, profiles: list, callback_command: str):
+    def __init__(self, profiles: list):
         super().__init__(timeout=180)
-        self.callback_command = callback_command
 
         options = [discord.SelectOption(label=name) for name in profiles]
         self.select = discord.ui.Select(placeholder="캐릭터를 선택하세요...", options=options, custom_id="profile_select")
-        self.select.callback = self.on_select
         self.add_item(self.select)
-
-    async def on_select(self, interaction: discord.Interaction):
-        selected_profile = self.select.values[0]
-        await interaction.response.defer()
 
 class ProfileManageView(discord.ui.View):
     def __init__(self, profile_name: str):

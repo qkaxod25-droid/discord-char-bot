@@ -65,7 +65,7 @@ class CharCreator(commands.Cog):
             await interaction.response.send_message("생성된 세계관이 없습니다. 먼저 `/worldview create` 명령어로 세계관을 만들어주세요.", ephemeral=True)
             return
 
-        view = WorldviewSelectView(worldviews, callback_command="start_session")
+        view = WorldviewSelectView(worldviews)
         await interaction.response.send_message("캐릭터를 생성할 세계관을 선택해주세요.", view=view, ephemeral=True)
 
     async def start_session(self, interaction: discord.Interaction, worldview: str):

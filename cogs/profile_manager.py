@@ -113,7 +113,7 @@ class ProfileManager(commands.Cog):
             await interaction.response.send_message("수정할 세계관이 없습니다.", ephemeral=True)
             return
         
-        view = WorldviewSelectView(worldviews, callback_command="edit_worldview")
+        view = WorldviewSelectView(worldviews)
         await interaction.response.send_message("설명을 수정할 세계관을 선택하세요.", view=view, ephemeral=True)
 
 
@@ -162,7 +162,7 @@ class ProfileManager(commands.Cog):
             await interaction.response.send_message("볼 수 있는 세계관이 없습니다.", ephemeral=True)
             return
 
-        view = WorldviewSelectView(worldviews, callback_command="view_worldview")
+        view = WorldviewSelectView(worldviews)
         await interaction.response.send_message("상세 설명을 볼 세계관을 선택하세요.", view=view, ephemeral=True)
 
     async def _show_worldview_description(self, interaction: discord.Interaction, name: str):
@@ -290,7 +290,7 @@ class ProfileManager(commands.Cog):
             await interaction.response.send_message("저장된 프로필이 없습니다.", ephemeral=True)
             return
         
-        view = ProfileSelectView(profiles, callback_command="manage_profile")
+        view = ProfileSelectView(profiles)
         await interaction.response.send_message("관리할 캐릭터 프로필을 선택하세요.", view=view, ephemeral=True)
 
 
