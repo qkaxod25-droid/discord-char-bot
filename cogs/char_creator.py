@@ -110,10 +110,24 @@ class CharCreator(commands.Cog):
         await interaction.response.defer(ephemeral=True) # 응답 시간을 확보합니다.
 
         try:
+            # 데이터베이스에서 세계관 설명 가져오기
+            conn = sqlite3.connect(self.db_file)
+            cursor = conn.cursor()
+            cursor.execute("SELECT description FROM worldviews WHERE name = ?", (session['worldview'],))
+            result = cursor.fetchone()
+            conn.close()
+            worldview_desc = result[0] if result else "A generic fantasy world."
+            print(f"[Log] Worldview description for '{session['worldview']}' loaded for profile generation.")
+
             # 시스템 지침: 최종 프로필 생성을 위한 상세 지시
-            system_instruction = f"""You are a creative novelist. Based on the entire following conversation, generate a detailed character profile for the '{{session['worldview']}}' universe.
+            system_instruction = f"""You are a creative novelist. Based on the entire following conversation, generate a detailed character profile for the '{session['worldview']}' universe.
 The profile must strictly follow the template below. Synthesize all the details provided by the user and your creative suggestions into a coherent and compelling character sheet.
 The tone should be descriptive and engaging, suitable for a novel.
+
+Here is the detailed setting for the world:
+---
+{worldview_desc}
+---
 
 **Template:**
 
@@ -225,7 +239,7 @@ Only generate the '주요 인물 1~2명과의 관계 설명 (선택):' section i
                     # Gemini를 위한 시스템 지침 설정
                     # Gemini를 위한 시스템 지침 설정: 대화형 AI 역할 부여
                     system_instruction = f"""You are a creative novelist brainstorming for your next project, targeting a male audience in their 20s.
-The story is set within the '{{session['worldview']}}' universe.
+The story is set within the '{session['worldview']}' universe.
 
 Your goal is to collaborate with the user to build a compelling character.
 Base the character's details on the user's input, but be ready to offer creative and inspiring suggestions if they ask for help.
@@ -233,11 +247,12 @@ Your tone should be encouraging and collaborative.
 
 Here is the detailed setting for the world:
 ---
-{{worldview_desc}}
+{worldview_desc}
 ---
 """
                     
                     try:
+                        print("[Log] Generating content with Gemini...")
                         model = genai.GenerativeModel(
                             'gemini-2.5-pro',
                             system_instruction=system_instruction
