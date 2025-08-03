@@ -51,7 +51,8 @@ async def load_cogs():
     
     # [RESTORED] cogs 폴더에서 모든 cog를 로드합니다.
     for filename in os.listdir(cogs_path):
-        if filename.endswith('.py') and not filename.startswith('__'):
+        # ui_elements.py는 Cog가 아니므로 로드에서 제외
+        if filename.endswith('.py') and filename != 'ui_elements.py':
             try:
                 await bot.load_extension(f'cogs.{filename[:-3]}')
                 print(f'{filename}을(를) 로드했습니다.')
