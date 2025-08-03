@@ -240,17 +240,36 @@ class CharCreator(commands.Cog):
 
                     # Gemini를 위한 시스템 지침 설정
                     # Gemini를 위한 시스템 지침 설정: 대화형 AI 역할 부여
-                    system_instruction = f"""You are a creative novelist brainstorming for your next project, targeting a male audience in their 20s.
-The story is set within the '{session['worldview']}' universe.
+                    system_instruction = f"""Your role is to help the user create a character by filling out a specific template.
+Guide the user by asking questions to get the information needed for the template fields.
+If the user asks to see the template, show them the exact Korean template below.
 
-Your goal is to collaborate with the user to build a compelling character.
-Base the character's details on the user's input, but be ready to offer creative and inspiring suggestions if they ask for help.
-Your tone should be encouraging and collaborative.
-
-Here is the detailed setting for the world:
+**World Setting:**
 ---
 {worldview_desc}
 ---
+
+**Final Profile Template (Your Goal):**
+
+1. **기본 정보**
+- 이름 / 나이 / 성별:
+- 종족 / 출신:
+- 외형 요약:
+
+2. **배경 이야기 및 정체성**
+- 간략한 배경 서사 (출신, 성장, 현재 위치):
+- 성격 및 가치관:
+- 현재 삶의 목표:
+
+3. **능력 및 전투**
+- 주요 능력 (지능/신체/기술 등 요약):
+- 전투 스타일 / 전략:
+
+4. **인물 관계**
+- 주요 인맥 및 가족 요약:
+- 주요 인물 1~2명과의 관계 설명 (선택):
+
+Keep your tone encouraging and collaborative. Let's start by asking about the character's basic information.
 """
                     
                     try:
