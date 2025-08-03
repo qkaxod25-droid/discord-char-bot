@@ -60,13 +60,16 @@ class CharCreator(commands.Cog):
     @app_commands.describe(worldview="캐릭터를 생성할 세계관을 선택하세요.")
     async def start(self, interaction: discord.Interaction, worldview: str):
         """캐릭터 생성 세션을 시작하는 명령어"""
+        print(f"[Log] User {interaction.user.id} attempting to start session with worldview: {worldview}")
         worldviews = self.get_worldviews()
         if worldview not in worldviews:
+            print(f"[Log] Invalid worldview '{worldview}' for user {interaction.user.id}")
             await interaction.response.send_message(f"'{worldview}'는 유효한 세계관이 아닙니다. 다음 중에서 선택해주세요: {', '.join(worldviews)}", ephemeral=True)
             return
 
         user_id = interaction.user.id
         if user_id in active_sessions:
+            print(f"[Log] User {user_id} tried to start a session while another is active.")
             await interaction.response.send_message("이미 진행 중인 캐릭터 생성 세션이 있습니다. 새로 시작하려면 먼저 `/quit`을 입력해주세요.", ephemeral=True)
             return
 
@@ -77,13 +80,16 @@ class CharCreator(commands.Cog):
             "last_message_time": time.time(),
             "timeout_notified": False
         }
+        print(f"[Log] Session started for user {user_id} with worldview: {worldview}")
         
         try:
             # 사용자에게 DM으로 안내 메시지 전송
             await interaction.user.send(f"'{worldview}' 세계관으로 캐릭터 생성을 시작합니다! DM으로 저와 자유롭게 대화하며 캐릭터를 만들어보세요. 대화를 마치고 싶으시면 언제든지 `/quit`을 입력해주세요.")
             # 상호작용에는 확인 메시지 전송
             await interaction.response.send_message("캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", ephemeral=True)
+            print(f"[Log] DM sent to user {user_id} to start session.")
         except discord.Forbidden:
+            print(f"[Log] Cannot send DM to user {user_id}. Deleting session.")
             await interaction.response.send_message("DM을 보낼 수 없습니다. 봇의 DM을 허용해주세요.", ephemeral=True)
             if user_id in active_sessions:
                 del active_sessions[user_id]
@@ -181,6 +187,7 @@ Synthesize all the details provided by the user and your creative suggestions in
         if user_id in active_sessions:
             # DM 채널에서만 응답
             if isinstance(message.channel, discord.DMChannel):
+                print(f"[Log] DM received from user {user_id}")
                 async with message.channel.typing():
                     session = active_sessions[user_id]
                     
@@ -190,6 +197,7 @@ Synthesize all the details provided by the user and your creative suggestions in
                     
                     content = message.content
                     session['messages'].append({"role": "user", "parts": [content]})
+                    print(f"[Log] Message from {user_id} added to session history.")
 
                     # 데이터베이스에서 세계관 설명 가져오기
                     conn = sqlite3.connect(self.db_file)
@@ -198,6 +206,7 @@ Synthesize all the details provided by the user and your creative suggestions in
                     result = cursor.fetchone()
                     conn.close()
                     worldview_desc = result[0] if result else "A generic fantasy world."
+                    print(f"[Log] Worldview description for '{session['worldview']}' loaded for user {user_id}.")
 
                     # Gemini를 위한 시스템 지침 설정
                     # Gemini를 위한 시스템 지침 설정: 대화형 AI 역할 부여

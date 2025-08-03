@@ -20,39 +20,53 @@ class ProfileManager(commands.Cog):
     @app_commands.describe(name="새 세계관의 이름", description="새 세계관에 대한 간략한 설명")
     async def worldview_create(self, interaction: discord.Interaction, name: str, description: str):
         """새로운 세계관을 데이터베이스에 추가합니다."""
+        print(f"[Log] User {interaction.user.id} attempting to create worldview: {name}")
         await interaction.response.defer(ephemeral=True)
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
+        conn = None
         try:
+            conn = sqlite3.connect(self.db_file)
+            cursor = conn.cursor()
+            print(f"[Log] DB connected for creating worldview: {name}")
             cursor.execute("INSERT INTO worldviews (name, description) VALUES (?, ?)", (name, description))
             conn.commit()
+            print(f"[Log] Worldview '{name}' created successfully.")
             await interaction.followup.send(f"✅ 새로운 세계관 '{name}'(이)가 성공적으로 생성되었습니다!")
         except sqlite3.IntegrityError:
+            print(f"[Log] IntegrityError on creating worldview '{name}': Already exists.")
             await interaction.followup.send(f"❌ 오류: '{name}'(이)라는 이름의 세계관이 이미 존재합니다.")
         except Exception as e:
+            print(f"[Log] Exception on creating worldview '{name}': {e}")
             await interaction.followup.send(f"❌ 오류: 세계관을 생성하는 중 문제가 발생했습니다: {e}")
         finally:
-            conn.close()
+            if conn:
+                conn.close()
+                print(f"[Log] DB connection closed for creating worldview: {name}")
 
     @worldview_group.command(name="edit", description="기존 세계관의 설명을 수정합니다.")
     @app_commands.describe(name="수정할 세계관 이름", description="새로운 세계관 설명")
     async def worldview_edit(self, interaction: discord.Interaction, name: str, description: str):
+        print(f"[Log] User {interaction.user.id} attempting to edit worldview: {name}")
         await interaction.response.defer(ephemeral=True)
         conn = None  # conn을 try 블록 밖에서 초기화
         try:
             conn = sqlite3.connect(self.db_file)
             cursor = conn.cursor()
+            print(f"[Log] DB connected for editing worldview: {name}")
             cursor.execute("UPDATE worldviews SET description = ? WHERE name = ?", (description, name))
             if cursor.rowcount > 0:
                 conn.commit()
+                print(f"[Log] Worldview '{name}' edited successfully.")
                 await interaction.followup.send(f"✅ '{name}' 세계관의 설명이 수정되었습니다.")
             else:
+                print(f"[Log] Worldview '{name}' not found for editing.")
                 await interaction.followup.send(f"❌ '{name}' 세계관을 찾을 수 없습니다.")
         except Exception as e:
+            print(f"[Log] Exception on editing worldview '{name}': {e}")
             await interaction.followup.send(f"❌ 오류: 세계관을 수정하는 중 문제가 발생했습니다: {e}")
         finally:
             if conn:
                 conn.close()
+                print(f"[Log] DB connection closed for editing worldview: {name}")
 
     @worldview_group.command(name="list", description="저장된 모든 세계관의 목록과 설명을 보여줍니다.")
     async def worldview_list(self, interaction: discord.Interaction):
