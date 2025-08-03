@@ -68,7 +68,7 @@ class ProfileManager(commands.Cog):
                 conn.close()
                 print(f"[Log] DB connection closed for editing worldview: {name}")
 
-    @worldview_group.command(name="list", description="저장된 모든 세계관의 목록과 설명을 보여줍니다.")
+    @worldview_group.command(name="list", description="저장된 모든 세계관의 이름을 보여줍니다.")
     async def worldview_list(self, interaction: discord.Interaction):
         print(f"[Log] User {interaction.user.id} requested worldview list.")
         await interaction.response.defer(ephemeral=True)
@@ -77,7 +77,7 @@ class ProfileManager(commands.Cog):
             conn = sqlite3.connect(self.db_file)
             cursor = conn.cursor()
             print("[Log] DB connected for listing worldviews.")
-            cursor.execute("SELECT name, description FROM worldviews ORDER BY id")
+            cursor.execute("SELECT name FROM worldviews ORDER BY id")
             worldviews = cursor.fetchall()
             
             if not worldviews:
@@ -85,9 +85,13 @@ class ProfileManager(commands.Cog):
                 await interaction.followup.send("저장된 세계관이 없습니다.")
                 return
                 
-            embed = discord.Embed(title="🌌 세계관 목록", color=discord.Color.purple())
-            for name, desc in worldviews:
-                embed.add_field(name=name, value=desc, inline=False)
+            # 여러 줄의 문자열로 세계관 목록을 만듭니다.
+            worldview_names = "\n".join([f"- {row[0]}" for row in worldviews])
+            embed = discord.Embed(
+                title="🌌 세계관 목록",
+                description=worldview_names,
+                color=discord.Color.purple()
+            )
             
             print(f"[Log] Sending worldview list to user {interaction.user.id}.")
             await interaction.followup.send(embed=embed)
@@ -99,6 +103,42 @@ class ProfileManager(commands.Cog):
             if conn:
                 conn.close()
                 print("[Log] DB connection closed for listing worldviews.")
+
+    @worldview_group.command(name="view", description="특정 세계관의 상세 설명을 봅니다.")
+    @app_commands.describe(name="상세 설명을 볼 세계관의 이름")
+    async def worldview_view(self, interaction: discord.Interaction, name: str):
+        print(f"[Log] User {interaction.user.id} requested to view worldview: {name}")
+        await interaction.response.defer(ephemeral=True)
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_file)
+            cursor = conn.cursor()
+            print(f"[Log] DB connected for viewing worldview: {name}")
+            cursor.execute("SELECT description FROM worldviews WHERE name = ?", (name,))
+            result = cursor.fetchone()
+            
+            if not result:
+                print(f"[Log] Worldview '{name}' not found for viewing.")
+                await interaction.followup.send(f"'{name}' 세계관을 찾을 수 없습니다.")
+                return
+            
+            description = result[0]
+            embed = discord.Embed(
+                title=f"🌌 세계관: {name}",
+                description=description,
+                color=discord.Color.purple()
+            )
+            
+            print(f"[Log] Sending worldview description for '{name}' to user {interaction.user.id}.")
+            await interaction.followup.send(embed=embed)
+
+        except Exception as e:
+            print(f"[Log] Exception on viewing worldview '{name}': {e}")
+            await interaction.followup.send(f"❌ 오류: 세계관 정보를 불러오는 중 문제가 발생했습니다: {e}")
+        finally:
+            if conn:
+                conn.close()
+                print(f"[Log] DB connection closed for viewing worldview: {name}")
 
     @app_commands.command(name="profiles", description="내가 저장한 모든 캐릭터 프로필 목록을 봅니다.")
     async def list_profiles(self, interaction: discord.Interaction):
