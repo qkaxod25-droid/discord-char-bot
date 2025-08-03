@@ -177,7 +177,12 @@ class CharCreatorWorldviewSelectView(discord.ui.View):
                 "last_message_time": time.time()
             }
             
-            await interaction.user.send(f"'{selected_worldview}' 세계관으로 캐릭터 생성을 시작합니다! DM으로 대화해주세요.")
+            # 생성 완료 버튼과 함께 첫 메시지 전송
+            control_view = ConversationControlView()
+            await interaction.user.send(
+                f"'{selected_worldview}' 세계관으로 캐릭터 생성을 시작합니다! DM으로 대화해주세요.",
+                view=control_view
+            )
             await interaction.followup.send("캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", ephemeral=True)
 
         except discord.Forbidden:
@@ -202,3 +207,104 @@ class ProfileSaveView(discord.ui.View):
     async def save_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         # 버튼 클릭 시 ProfileSaveModal을 띄움
         await interaction.response.send_modal(ProfileSaveModal(self.profile_data))
+
+class ConversationControlView(discord.ui.View):
+    """
+    [NEW] DM 대화 제어를 위한 View. 생성 완료 버튼을 포함합니다.
+    """
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="✅ 생성 완료", style=discord.ButtonStyle.success, custom_id="finish_creation_button")
+    async def finish_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer() # 응답 대기
+
+        bot = interaction.client
+        user_id = interaction.user.id
+
+        if user_id not in bot.active_sessions:
+            await interaction.followup.send("진행 중인 생성 세션이 없습니다.", ephemeral=True)
+            return
+
+        session = bot.active_sessions[user_id]
+        
+        try:
+            async with interaction.channel.typing():
+                # 지시사항: 최종 템플릿만 출력하도록 하는 영어 지침
+                final_prompt = "Based on the entire conversation history, complete the 'Final Profile Template'. Your output must only be the final, filled-out template text. Do not include any other conversational text, greetings, or explanations."
+                session['messages'].append({"role": "user", "parts": [final_prompt]})
+
+                # 기존 시스템 프롬프트와 대화 기록을 그대로 사용
+                worldview_name = session.get('worldview')
+                conn = sqlite3.connect(DB_FILE)
+                cursor = conn.cursor()
+                cursor.execute("SELECT description FROM worldviews WHERE name = ?", (worldview_name,))
+                result = cursor.fetchone()
+                conn.close()
+                worldview_desc = result[0] if result else "설명을 찾을 수 없습니다."
+                
+                # 기존 시스템 지침을 그대로 사용
+                system_instruction = f"""Your role is to help the user create a character by filling out a specific template.
+Guide the user by asking questions to get the information needed for the template fields.
+If the user asks to see the template, show them the exact Korean template below.
+
+**World Setting:**
+---
+{worldview_desc}
+---
+
+**Final Profile Template (Your Goal):**
+
+1. **기본 정보**
+- 이름 / 나이 / 성별:
+- 종족 / 출신:
+- 외형 요약:
+
+2. **배경 이야기 및 정체성**
+- 간략한 배경 서사 (출신, 성장, 현재 위치):
+- 성격 및 가치관:
+- 현재 삶의 목표:
+
+3. **능력 및 전투**
+- 주요 능력 (지능/신체/기술 등 요약):
+- 전투 스타일 / 전략:
+
+4. **인물 관계**
+- 주요 인맥 및 가족 요약:
+- 주요 인물 1~2명과의 관계 설명 (선택):
+
+Keep your tone encouraging and collaborative. Let's start by asking about the character's basic information.
+"""
+                
+                model = genai.GenerativeModel(
+                    'gemini-1.5-flash',
+                    system_instruction=system_instruction
+                )
+                
+                initial_bot_prompt = {"role": "model", "parts": ["어떤 캐릭터를 만들고 싶으신가요? 자유롭게 이야기해주세요."]}
+                full_history = [initial_bot_prompt] + session['messages']
+
+                response = await model.generate_content_async(full_history)
+                profile_data = response.text
+
+                # 최종 프로필과 저장 버튼 전송
+                embed = discord.Embed(
+                    title=f"'{worldview_name}' 세계관 기반 캐릭터 프로필",
+                    description=profile_data,
+                    color=discord.Color.gold()
+                )
+                embed.set_footer(text="아래 버튼을 눌러 프로필을 저장할 수 있습니다.")
+                
+                save_view = ProfileSaveView(profile_data=profile_data)
+                await interaction.followup.send(embed=embed, view=save_view)
+
+                # 원래 메시지의 버튼 비활성화
+                button.disabled = True
+                await interaction.edit_original_response(view=self)
+
+                # 세션 종료
+                del bot.active_sessions[user_id]
+
+        except Exception as e:
+            traceback.print_exc()
+            await interaction.followup.send(f"❌ 오류: 프로필을 생성하는 중 문제가 발생했습니다: {e}", ephemeral=True)
