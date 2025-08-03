@@ -104,12 +104,58 @@ class SaveProfileView(discord.ui.View):
         await interaction.response.send_modal(modal)
 
 class WorldviewSelectView(discord.ui.View):
-    def __init__(self, worldviews: list, custom_id: str = "worldview_select"):
+    def __init__(self, cog, worldviews: list):
         super().__init__(timeout=180)
+        self.cog = cog  # CharCreator 코그의 인스턴스
         
         options = [discord.SelectOption(label=name) for name in worldviews]
-        self.select = discord.ui.Select(placeholder="세계관을 선택하세요...", options=options, custom_id=custom_id)
+        
+        # Select 메뉴에 콜백 함수를 직접 연결
+        self.select = discord.ui.Select(
+            placeholder="세계관을 선택하세요...",
+            options=options,
+            custom_id="start_worldview_select" # custom_id는 유지
+        )
+        self.select.callback = self.select_callback
         self.add_item(self.select)
+
+    async def select_callback(self, interaction: discord.Interaction):
+        """사용자가 세계관을 선택했을 때 호출되는 콜백"""
+        # 로직을 View 내부에서 직접 처리
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
+        user_id = interaction.user.id
+        worldview = self.select.values[0]
+
+        if user_id in self.cog.active_sessions:
+            await interaction.followup.send("이미 진행 중인 캐릭터 생성 세션이 있습니다. 새로 시작하려면 먼저 `/quit`을 입력해주세요.", ephemeral=True)
+            return
+
+        # 세션 시작
+        self.cog.active_sessions[user_id] = {
+            "worldview": worldview,
+            "messages": [],
+            "last_message_time": time.time(),
+            "timeout_notified": False
+        }
+        
+        try:
+            # DM 전송
+            await interaction.user.send(f"'{worldview}' 세계관으로 캐릭터 생성을 시작합니다! DM으로 저와 자유롭게 대화하며 캐릭터를 만들어보세요. 대화를 마치고 싶으시면 언제든지 `/quit`을 입력해주세요.")
+            
+            # 후속 응답 전송
+            await interaction.followup.send(content="캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", ephemeral=True)
+
+        except discord.Forbidden:
+            await interaction.followup.send(content="DM을 보낼 수 없습니다. 서버 설정에서 '서버 멤버가 보내는 다이렉트 메시지 허용'을 켜주세요.", ephemeral=True)
+            if user_id in self.cog.active_sessions:
+                del self.cog.active_sessions[user_id]
+        except Exception as e:
+            print(f"[Log] An unexpected error occurred in select_callback for user {user_id}: {e}")
+            traceback.print_exc()
+            await interaction.followup.send(content="세션 시작 중 예상치 못한 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
+            if user_id in self.cog.active_sessions:
+                del self.cog.active_sessions[user_id]
 
 class ProfileSelectView(discord.ui.View):
     def __init__(self, profiles: list):

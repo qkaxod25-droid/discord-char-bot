@@ -7,7 +7,7 @@ import os
 import asyncio
 import time
 import traceback
-from .ui_elements import SaveProfileView
+from .ui_elements import SaveProfileView, WorldviewSelectView
 
 # 대화 세션을 저장할 딕셔너리
 # key: user_id, value: {'worldview': str, 'messages': list, 'last_message_time': float, 'timeout_notified': bool}
@@ -17,6 +17,7 @@ class CharCreator(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.db_file = os.path.join("data", "profiles.db")
+        self.active_sessions = active_sessions # 전역 변수를 인스턴스 변수에 할당
         self.timeout_task = self.bot.loop.create_task(self.check_inactive_sessions())
 
     def cog_unload(self):
@@ -27,8 +28,8 @@ class CharCreator(commands.Cog):
         while not self.bot.is_closed():
             now = time.time()
             # RuntimeError를 피하기 위해 세션 키 목록의 복사본을 만들어 사용합니다.
-            for user_id in list(active_sessions.keys()):
-                session = active_sessions.get(user_id)
+            for user_id in list(self.active_sessions.keys()):
+                session = self.active_sessions.get(user_id)
                 if not session:
                     continue
 
@@ -38,11 +39,11 @@ class CharCreator(commands.Cog):
                         user = await self.bot.fetch_user(user_id)
                         await user.send("3분 동안 응답이 없어 대화가 중단되었습니다. 계속하시려면 메시지를 보내주시거나, 세션을 완전히 종료하려면 `/quit`을 입력해주세요.")
                         # 알림을 보냈다고 표시
-                        active_sessions[user_id]['timeout_notified'] = True
+                        self.active_sessions[user_id]['timeout_notified'] = True
                     except (discord.NotFound, discord.Forbidden):
                         # 유저를 찾을 수 없거나 DM을 보낼 수 없는 경우, 세션을 조용히 종료
-                        if user_id in active_sessions:
-                            del active_sessions[user_id]
+                        if user_id in self.active_sessions:
+                            del self.active_sessions[user_id]
                     except Exception as e:
                         print(f"타임아웃 알림 전송 중 오류 발생 (user: {user_id}): {e}")
                         traceback.print_exc()
@@ -69,92 +70,19 @@ class CharCreator(commands.Cog):
             await interaction.followup.send("생성된 세계관이 없습니다. 먼저 `/worldview create` 명령어로 세계관을 만들어주세요.", ephemeral=True)
             return
 
-        view = WorldviewSelectView(worldviews, custom_id="start_worldview_select")
+        # View에 cog 인스턴스(self)를 전달하여 컨텍스트를 제공합니다.
+        view = WorldviewSelectView(self, worldviews)
         await interaction.followup.send("캐릭터를 생성할 세계관을 선택해주세요.", view=view, ephemeral=True)
-
-    async def start_session(self, interaction: discord.Interaction, worldview: str):
-        """실제 캐릭터 생성 세션을 시작하는 내부 함수"""
-        print("[Interaction Trace] Entered start_session.")
-        user_id = interaction.user.id
-        print(f"[Log] User {user_id} selected worldview '{worldview}' to start session.")
-
-        if user_id in active_sessions:
-            print(f"[Log] User {user_id} tried to start a session while another is active.")
-            # The interaction has already been deferred, so we use followup.
-            await interaction.followup.send("이미 진행 중인 캐릭터 생성 세션이 있습니다. 새로 시작하려면 먼저 `/quit`을 입력해주세요.", ephemeral=True)
-            return
-
-        # 세션 시작
-        active_sessions[user_id] = {
-            "worldview": worldview,
-            "messages": [],
-            "last_message_time": time.time(),
-            "timeout_notified": False
-        }
-        print(f"[Log] Session started for user {user_id} with worldview: {worldview}")
-        
-        try:
-            # 사용자에게 DM으로 안내 메시지 전송
-            print("[Interaction Trace] Attempting to send DM.")
-            await interaction.user.send(f"'{worldview}' 세계관으로 캐릭터 생성을 시작합니다! DM으로 저와 자유롭게 대화하며 캐릭터를 만들어보세요. 대화를 마치고 싶으시면 언제든지 `/quit`을 입력해주세요.")
-            print("[Interaction Trace] DM sent successfully. Attempting to edit original response.")
-            
-            # 후속 응답으로 확인 메시지 전송 (ephemeral은 defer와 일치시켜야 함)
-            await interaction.followup.send(content="캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", ephemeral=True)
-            print("[Interaction Trace] Follow-up response sent successfully.")
-            print(f"[Log] DM sent to user {user_id} to start session.")
-        except discord.Forbidden:
-            print(f"[Log] Cannot send DM to user {user_id}. Deleting session.")
-            traceback.print_exc()
-            # DM 차단 시 후속 응답으로 사용자에게 안내
-            await interaction.followup.send(content="DM을 보낼 수 없습니다. 서버 설정에서 '서버 멤버가 보내는 다이렉트 메시지 허용'을 켜주세요.", ephemeral=True)
-            if user_id in active_sessions:
-                del active_sessions[user_id]
-        except Exception as e:
-            print(f"[Log] An unexpected error occurred in start_session for user {user_id}: {e}")
-            traceback.print_exc()
-            # 예상치 못한 오류 발생 시 후속 응답으로 사용자에게 안내
-            await interaction.followup.send(content="세션 시작 중 예상치 못한 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
-            if user_id in active_sessions:
-                del active_sessions[user_id]
-
-
 
     @app_commands.command(name="quit", description="진행 중인 캐릭터 생성을 종료합니다.")
     async def quit(self, interaction: discord.Interaction):
         """캐릭터 생성 세션을 종료하는 명령어"""
         user_id = interaction.user.id
-        if user_id in active_sessions:
-            del active_sessions[user_id]
+        if user_id in self.active_sessions:
+            del self.active_sessions[user_id]
             await interaction.response.send_message("캐릭터 생성이 종료되었습니다. 또 이용해주셔서 감사합니다!", ephemeral=True)
         else:
             await interaction.response.send_message("시작된 캐릭터 생성 세션이 없습니다.", ephemeral=True)
-
-    @commands.Cog.listener()
-    async def on_interaction(self, interaction: discord.Interaction):
-        """드롭다운 선택과 같은 상호작용을 처리합니다."""
-        try:
-            if interaction.type == discord.InteractionType.component:
-                custom_id = interaction.data.get("custom_id")
-                print(f"[Interaction Trace] Received component interaction with custom_id: {custom_id}")
-                if custom_id == "start_worldview_select":
-                    print("[Interaction Trace] Matched 'start_worldview_select'. Deferring response.")
-                    # Defer the interaction first to prevent timeouts
-                    await interaction.response.defer(thinking=True, ephemeral=True)
-                    print("[Interaction Trace] Response deferred. Preparing to start session.")
-                    selected_worldview = interaction.data['values'][0]
-                    await self.start_session(interaction, selected_worldview)
-                    print("[Interaction Trace] start_session call completed.")
-        except Exception as e:
-            print(f"on_interaction 처리 중 오류 발생: {e}")
-            traceback.print_exc()
-            # Check if the interaction can still be responded to
-            if not interaction.response.is_done():
-                try:
-                    await interaction.response.send_message("상호작용 처리 중 오류가 발생했습니다.", ephemeral=True)
-                except discord.InteractionResponded:
-                    await interaction.followup.send("상호작용 처리 중 오류가 발생했습니다.", ephemeral=True)
-
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -164,12 +92,12 @@ class CharCreator(commands.Cog):
             return
 
         user_id = message.author.id
-        if user_id in active_sessions:
+        if user_id in self.active_sessions:
             # DM 채널에서만 응답
             if isinstance(message.channel, discord.DMChannel):
                 print(f"[Log] DM received from user {user_id}")
                 async with message.channel.typing():
-                    session = active_sessions[user_id]
+                    session = self.active_sessions[user_id]
                     
                     # 세션 정보 업데이트
                     session['last_message_time'] = time.time()
