@@ -42,13 +42,10 @@ class SaveProfileModal(discord.ui.Modal, title="캐릭터 이름 정하기"):
 
 class SaveProfileView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=300)
+        super().__init__(timeout=None)
         self.db_file = os.path.join("data", "profiles.db")
 
-    @discord.ui.button(label="💾 프로필 저장하기", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="💾 프로필 저장하기", style=discord.ButtonStyle.success, custom_id="save_profile")
     async def save_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         modal = SaveProfileModal(self.db_file)
         await interaction.response.send_modal(modal)
-        button.disabled = True
-        await interaction.message.edit(view=self)
-        self.stop()

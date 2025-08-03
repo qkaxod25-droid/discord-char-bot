@@ -35,8 +35,9 @@ async def on_ready():
 
 async def load_cogs():
     """cogs 폴더에서 모든 cog를 로드합니다."""
-    for filename in os.listdir('./discord-char-bot/cogs'):
-        if filename.endswith('.py'):
+    cogs_path = './cogs'
+    for filename in os.listdir(cogs_path):
+        if filename.endswith('.py') and filename != 'ui_elements.py':
             try:
                 await bot.load_extension(f'cogs.{filename[:-3]}')
                 print(f'{filename}을(를) 로드했습니다.')
