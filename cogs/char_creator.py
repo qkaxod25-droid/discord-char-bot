@@ -4,7 +4,7 @@ from discord import app_commands
 import google.generativeai as genai
 import sqlite3
 import traceback
-from .ui_elements import CharCreatorWorldviewSelectView # CharCreator 전용 View를 임포트
+from .ui_elements import CharCreatorWorldviewSelectView, ProfileSaveView # 저장 View 추가
 from database import DB_FILE # database.py 에서 절대 경로를 가져옴
 
 class CharCreator(commands.Cog):
@@ -69,7 +69,16 @@ class CharCreator(commands.Cog):
                 session = self.bot.active_sessions[user_id]
                 
                 content = message.content
-                session['messages'].append({"role": "user", "parts": [content]})
+
+                # 사용자가 프로필 완성을 요청했는지 확인
+                if any(keyword in content for keyword in ["정리해줘", "완성해줘", "만들어줘", "생성해줘"]):
+                    # "최종 프로필을 생성해줘" 라는 명확한 지시를 대화 기록에 추가
+                    final_prompt = "지금까지의 대화 내용을 바탕으로, 앞서 제시된 Final Profile Template 양식에 맞춰 최종 캐릭터 프로필을 완성해줘. 다른 부가적인 설명 없이, 완성된 프로필 본문만 응답해줘."
+                    session['messages'].append({"role": "user", "parts": [final_prompt]})
+                    is_finalizing = True
+                else:
+                    session['messages'].append({"role": "user", "parts": [content]})
+                    is_finalizing = False
 
                 # 데이터베이스에서 세계관 설명 가져오기
                 worldview_name = session.get('worldview')
@@ -126,9 +135,26 @@ Keep your tone encouraging and collaborative. Let's start by asking about the ch
                     response = await model.generate_content_async(full_history)
                     bot_response = response.text
                     
-                    session['messages'].append({"role": "model", "parts": [bot_response]})
-                    
-                    await message.channel.send(bot_response)
+                    if is_finalizing:
+                        # 최종 프로필 생성 시: 임베드와 저장 버튼 전송
+                        embed = discord.Embed(
+                            title=f"'{worldview_name}' 세계관 기반 캐릭터 프로필",
+                            description=bot_response,
+                            color=discord.Color.gold()
+                        )
+                        embed.set_footer(text="아래 버튼을 눌러 프로필을 저장할 수 있습니다.")
+                        
+                        # ProfileSaveView에 최종 결과물(bot_response)을 담아 전송
+                        view = ProfileSaveView(profile_data=bot_response)
+                        await message.channel.send(embed=embed, view=view)
+                        
+                        # 세션 종료
+                        if user_id in self.bot.active_sessions:
+                            del self.bot.active_sessions[user_id]
+                    else:
+                        # 일반 대화: 메시지 기록 및 응답
+                        session['messages'].append({"role": "model", "parts": [bot_response]})
+                        await message.channel.send(bot_response)
 
                 except Exception as e:
                     print(f"Gemini API 호출 중 오류 발생: {e}")

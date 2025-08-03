@@ -31,8 +31,41 @@ class WorldviewEditModal(discord.ui.Modal, title="세계관 설명 수정"):
         except Exception as e:
             await interaction.response.send_message(f"❌ 오류: 설명을 수정하는 중 문제가 발생했습니다: {e}", ephemeral=True)
 
-# --- Views (버튼, 드롭다운 메뉴) ---
+class ProfileSaveModal(discord.ui.Modal, title="프로필 저장"):
+    def __init__(self, profile_data: str):
+        super().__init__()
+        self.profile_data = profile_data
+        self.character_name_input = discord.ui.TextInput(
+            label="캐릭터 이름",
+            placeholder="저장할 캐릭터의 이름을 입력하세요.",
+            required=True,
+            max_length=50
+        )
+        self.add_item(self.character_name_input)
 
+    async def on_submit(self, interaction: discord.Interaction):
+        character_name = self.character_name_input.value
+        user_id = interaction.user.id
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            # 동일한 이름의 프로필이 있는지 확인 (덮어쓰기)
+            cursor.execute("SELECT 1 FROM profiles WHERE user_id = ? AND character_name = ?", (user_id, character_name))
+            if cursor.fetchone():
+                cursor.execute("UPDATE profiles SET profile_data = ? WHERE user_id = ? AND character_name = ?", (self.profile_data, user_id, character_name))
+                message = f"✅ 기존 프로필 '{character_name}'을(를) 덮어썼습니다."
+            else:
+                cursor.execute("INSERT INTO profiles (user_id, character_name, profile_data) VALUES (?, ?, ?)", (user_id, character_name, self.profile_data))
+                message = f"✅ '{character_name}' 이름으로 프로필이 저장되었습니다."
+            conn.commit()
+            conn.close()
+            await interaction.response.send_message(message, ephemeral=True)
+        except Exception as e:
+            traceback.print_exc()
+            await interaction.response.send_message(f"❌ 오류: 프로필을 저장하는 중 문제가 발생했습니다: {e}", ephemeral=True)
+ 
+# --- Views (버튼, 드롭다운 메뉴) ---
+ 
 class WorldviewSelectView(discord.ui.View):
     """
     [REWRITE V2] 세계관 선택을 위한 View.
@@ -156,3 +189,16 @@ class CharCreatorWorldviewSelectView(discord.ui.View):
             await interaction.followup.send("세션 시작 중 오류가 발생했습니다.", ephemeral=True)
             if user_id in interaction.client.active_sessions:
                 del interaction.client.active_sessions[user_id]
+
+class ProfileSaveView(discord.ui.View):
+    """
+    [NEW] 생성된 프로필을 저장하기 위한 View.
+    """
+    def __init__(self, profile_data: str):
+        super().__init__(timeout=None) # 저장 버튼은 타임아웃이 없어야 함
+        self.profile_data = profile_data
+
+    @discord.ui.button(label="💾 프로필 저장하기", style=discord.ButtonStyle.success, custom_id="save_profile_button")
+    async def save_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # 버튼 클릭 시 ProfileSaveModal을 띄움
+        await interaction.response.send_modal(ProfileSaveModal(self.profile_data))
