@@ -98,16 +98,23 @@ class CharCreator(commands.Cog):
             print("[Interaction Trace] Attempting to send DM.")
             await interaction.user.send(f"'{worldview}' 세계관으로 캐릭터 생성을 시작합니다! DM으로 저와 자유롭게 대화하며 캐릭터를 만들어보세요. 대화를 마치고 싶으시면 언제든지 `/quit`을 입력해주세요.")
             print("[Interaction Trace] DM sent successfully. Attempting to edit original response.")
+            
             # 원래 상호작용에는 확인 메시지 수정
-            # Since the original interaction was deferred, we edit it.
             await interaction.edit_original_response(content="캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", view=None)
             print("[Interaction Trace] Original response edited successfully.")
             print(f"[Log] DM sent to user {user_id} to start session.")
         except discord.Forbidden:
             print(f"[Log] Cannot send DM to user {user_id}. Deleting session.")
             traceback.print_exc()
-            # Edit the original response to inform the user.
-            await interaction.edit_original_response(content="DM을 보낼 수 없습니다. 봇의 DM을 허용해주세요.", view=None)
+            # DM 차단 시 사용자에게 안내
+            await interaction.edit_original_response(content="DM을 보낼 수 없습니다. 서버 설정에서 '서버 멤버가 보내는 다이렉트 메시지 허용'을 켜주세요.", view=None)
+            if user_id in active_sessions:
+                del active_sessions[user_id]
+        except Exception as e:
+            print(f"[Log] An unexpected error occurred in start_session for user {user_id}: {e}")
+            traceback.print_exc()
+            # 예상치 못한 오류 발생 시 사용자에게 안내
+            await interaction.edit_original_response(content="세션 시작 중 예상치 못한 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", view=None)
             if user_id in active_sessions:
                 del active_sessions[user_id]
 
