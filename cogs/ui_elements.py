@@ -1,6 +1,7 @@
 import discord
 import sqlite3
 import time
+import google.generativeai as genai
 import traceback
 from database import DB_FILE
 
