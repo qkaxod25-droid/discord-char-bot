@@ -4,9 +4,14 @@ import os
 from dotenv import load_dotenv
 import google.generativeai as genai
 import asyncio
+from database import initialize_database
 
 # .env 파일에서 환경 변수 로드
 load_dotenv()
+
+# 데이터베이스 초기화
+initialize_database()
+print("[Log] Database initialized.")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
