@@ -112,17 +112,31 @@ class CharCreator(commands.Cog):
         try:
             # 시스템 지침: 최종 프로필 생성을 위한 상세 지시
             system_instruction = f"""You are a creative novelist. Based on the entire following conversation, generate a detailed character profile for the '{{session['worldview']}}' universe.
-The profile should be well-structured and ready to be used in a story. Organize the information clearly.
+The profile must strictly follow the template below. Synthesize all the details provided by the user and your creative suggestions into a coherent and compelling character sheet.
+The tone should be descriptive and engaging, suitable for a novel.
 
-The final output should be a comprehensive profile that includes, but is not limited to, the following sections:
-- **Name:**
-- **Appearance:**
-- **Personality:**
-- **Abilities/Skills:**
-- **Backstory:**
-- **Equipment/Items:**
+**Template:**
 
-Synthesize all the details provided by the user and your creative suggestions into a coherent and compelling character sheet. The tone should be descriptive and engaging, suitable for a novel."""
+1. **기본 정보**
+- 이름 / 나이 / 성별:
+- 종족 / 출신:
+- 외형 요약:
+
+2. **배경 이야기 및 정체성**
+- 간략한 배경 서사 (출신, 성장, 현재 위치):
+- 성격 및 가치관:
+- 현재 삶의 목표:
+
+3. **능력 및 전투**
+- 주요 능력 (지능/신체/기술 등 요약):
+- 전투 스타일 / 전략:
+
+4. **인물 관계**
+- 주요 인맥 및 가족 요약:
+- 주요 인물 1~2명과의 관계 설명 (선택):
+
+Only generate the '주요 인물 1~2명과의 관계 설명 (선택):' section if the user has explicitly provided information about other characters or relationships. Otherwise, omit this specific line.
+"""
             
             model = genai.GenerativeModel(
                 'gemini-2.5-pro',
