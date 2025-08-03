@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 import google.generativeai as genai
 import asyncio
+import traceback
 from database import initialize_database
 
 # .env 파일에서 환경 변수 로드
@@ -37,6 +38,7 @@ async def on_ready():
         print(f"{len(synced)}개의 슬래시 커맨드를 동기화했습니다.")
     except Exception as e:
         print(f"커맨드 동기화 중 오류 발생: {e}")
+        traceback.print_exc()
 
 async def load_cogs():
     """cogs 폴더에서 모든 cog를 로드합니다."""
@@ -51,6 +53,7 @@ async def load_cogs():
                 print(f'{filename}을(를) 로드했습니다.')
             except Exception as e:
                 print(f'{filename}을(를) 로드하는 중 오류가 발생했습니다: {e}')
+                traceback.print_exc()
 
 async def main():
     """메인 함수"""

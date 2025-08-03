@@ -6,6 +6,7 @@ import sqlite3
 import os
 import asyncio
 import time
+import traceback
 from .ui_elements import SaveProfileView
 
 # 대화 세션을 저장할 딕셔너리
@@ -44,6 +45,7 @@ class CharCreator(commands.Cog):
                             del active_sessions[user_id]
                     except Exception as e:
                         print(f"타임아웃 알림 전송 중 오류 발생 (user: {user_id}): {e}")
+                        traceback.print_exc()
             
             await asyncio.sleep(60) # 60초마다 체크
 
@@ -129,6 +131,7 @@ class CharCreator(commands.Cog):
                     await self.start_session(interaction, selected_worldview)
         except Exception as e:
             print(f"on_interaction 처리 중 오류 발생: {e}")
+            traceback.print_exc()
             # Check if the interaction can still be responded to
             if not interaction.response.is_done():
                 try:
@@ -224,6 +227,7 @@ Keep your tone encouraging and collaborative. Let's start by asking about the ch
 
                     except Exception as e:
                         print(f"Gemini API 호출 중 오류 발생: {e}")
+                        traceback.print_exc()
                         await message.channel.send("죄송합니다, 아이디어를 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
 
 

@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import sqlite3
 import os
+import traceback
 from .ui_elements import (
     SaveProfileView, WorldviewSelectView, ProfileSelectView,
     ProfileManageView, WorldviewConfirmEditView, ProfileConfirmEditView
@@ -48,6 +49,7 @@ class ProfileManager(commands.Cog):
             await interaction.followup.send(f"❌ 오류: '{name}'(이)라는 이름의 세계관이 이미 존재합니다.")
         except Exception as e:
             print(f"[Log] Exception on creating worldview '{name}': {e}")
+            traceback.print_exc()
             await interaction.followup.send(f"❌ 오류: 세계관을 생성하는 중 문제가 발생했습니다: {e}")
         finally:
             if conn:
@@ -98,6 +100,7 @@ class ProfileManager(commands.Cog):
             
         except Exception as e:
             print(f"[Log] Exception on listing worldviews: {e}")
+            traceback.print_exc()
             await interaction.followup.send(f"❌ 오류: 세계관 목록을 불러오는 중 문제가 발생했습니다: {e}")
         finally:
             if conn:
@@ -145,6 +148,7 @@ class ProfileManager(commands.Cog):
 
         except Exception as e:
             print(f"[Log] Exception on viewing worldview '{name}': {e}")
+            traceback.print_exc()
             await interaction.followup.send(f"❌ 오류: 세계관 정보를 불러오는 중 문제가 발생했습니다: {e}", ephemeral=True)
         finally:
             if conn:
@@ -170,6 +174,7 @@ class ProfileManager(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
 
         except Exception as e:
+            traceback.print_exc()
             await interaction.followup.send(f"❌ 오류: 프로필을 불러오는 중 문제가 발생했습니다: {e}", ephemeral=True)
         finally:
             if conn:
