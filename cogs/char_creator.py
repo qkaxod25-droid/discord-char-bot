@@ -4,16 +4,48 @@ from discord import app_commands
 import google.generativeai as genai
 import sqlite3
 import os
+import asyncio
+import time
 from .ui_elements import SaveProfileView
 
 # 대화 세션을 저장할 딕셔너리
-# key: user_id, value: {'worldview': str, 'messages': list}
+# key: user_id, value: {'worldview': str, 'messages': list, 'last_message_time': float, 'timeout_notified': bool}
 active_sessions = {}
 
 class CharCreator(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.db_file = os.path.join("data", "profiles.db")
+        self.timeout_task = self.bot.loop.create_task(self.check_inactive_sessions())
+
+    def cog_unload(self):
+        self.timeout_task.cancel()
+
+    async def check_inactive_sessions(self):
+        await self.bot.wait_until_ready()
+        while not self.bot.is_closed():
+            now = time.time()
+            # RuntimeError를 피하기 위해 세션 키 목록의 복사본을 만들어 사용합니다.
+            for user_id in list(active_sessions.keys()):
+                session = active_sessions.get(user_id)
+                if not session:
+                    continue
+
+                # 3분 (180초) 이상 응답이 없고, 아직 알림을 보내지 않은 경우
+                if now - session.get('last_message_time', now) > 180 and not session.get('timeout_notified', False):
+                    try:
+                        user = await self.bot.fetch_user(user_id)
+                        await user.send("3분 동안 응답이 없어 대화가 중단되었습니다. 계속하시려면 메시지를 보내주시거나, 세션을 완전히 종료하려면 `/quit`을 입력해주세요.")
+                        # 알림을 보냈다고 표시
+                        active_sessions[user_id]['timeout_notified'] = True
+                    except (discord.NotFound, discord.Forbidden):
+                        # 유저를 찾을 수 없거나 DM을 보낼 수 없는 경우, 세션을 조용히 종료
+                        if user_id in active_sessions:
+                            del active_sessions[user_id]
+                    except Exception as e:
+                        print(f"타임아웃 알림 전송 중 오류 발생 (user: {user_id}): {e}")
+            
+            await asyncio.sleep(60) # 60초마다 체크
 
     def get_worldviews(self):
         """데이터베이스에서 세계관 목록을 가져옵니다."""
@@ -41,10 +73,20 @@ class CharCreator(commands.Cog):
         # 세션 시작
         active_sessions[user_id] = {
             "worldview": worldview,
-            "messages": []
+            "messages": [],
+            "last_message_time": time.time(),
+            "timeout_notified": False
         }
         
-        await interaction.response.send_message(f"'{worldview}' 세계관으로 캐릭터 생성을 시작합니다! 어떤 캐릭터를 만들고 싶으신가요? 자유롭게 이야기해주세요.", ephemeral=True)
+        try:
+            # 사용자에게 DM으로 안내 메시지 전송
+            await interaction.user.send(f"'{worldview}' 세계관으로 캐릭터 생성을 시작합니다! DM으로 저와 자유롭게 대화하며 캐릭터를 만들어보세요. 대화를 마치고 싶으시면 언제든지 `/quit`을 입력해주세요.")
+            # 상호작용에는 확인 메시지 전송
+            await interaction.response.send_message("캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.response.send_message("DM을 보낼 수 없습니다. 봇의 DM을 허용해주세요.", ephemeral=True)
+            if user_id in active_sessions:
+                del active_sessions[user_id]
 
     @app_commands.command(name="generate", description="현재 대화 내용으로 캐릭터 프로필을 생성합니다.")
     async def generate(self, interaction: discord.Interaction):
@@ -101,10 +143,17 @@ Synthesize all the details provided by the user and your creative suggestions in
                 "profile_data": response.text
             }
             
-            await interaction.followup.send(embed=embed, view=SaveProfileView()) # 저장 버튼이 있는 View 추가
+            try:
+                # 사용자에게 DM으로 프로필 전송
+                await interaction.user.send(embed=embed, view=SaveProfileView())
+                # 상호작용에는 확인 메시지 전송
+                await interaction.followup.send("프로필이 생성되어 DM으로 전송되었습니다!", ephemeral=True)
+            except discord.Forbidden:
+                await interaction.followup.send("DM을 보낼 수 없어 프로필을 전송하지 못했습니다. 봇의 DM을 허용해주세요.", ephemeral=True)
 
             # 프로필 생성 후 세션 종료
-            del active_sessions[user_id]
+            if user_id in active_sessions:
+                del active_sessions[user_id]
 
         except Exception as e:
             print(f"프로필 생성 중 오류 발생: {e}")
@@ -130,16 +179,16 @@ Synthesize all the details provided by the user and your creative suggestions in
 
         user_id = message.author.id
         if user_id in active_sessions:
-            # DM 채널이거나 봇을 멘션한 경우에만 응답
-            if isinstance(message.channel, discord.DMChannel) or self.bot.user.mentioned_in(message):
+            # DM 채널에서만 응답
+            if isinstance(message.channel, discord.DMChannel):
                 async with message.channel.typing():
                     session = active_sessions[user_id]
                     
-                    # 멘션을 제외한 실제 메시지 내용 추출
-                    content = message.content.replace(f'<@!{self.bot.user.id}>', '').replace(f'<@{self.bot.user.id}>', '').strip()
-                    if not content: # 멘션만 있고 내용이 없으면 무시
-                        return
+                    # 세션 정보 업데이트
+                    session['last_message_time'] = time.time()
+                    session['timeout_notified'] = False # 사용자가 응답했으므로 타임아웃 알림 상태 초기화
                     
+                    content = message.content
                     session['messages'].append({"role": "user", "parts": [content]})
 
                     # 데이터베이스에서 세계관 설명 가져오기
