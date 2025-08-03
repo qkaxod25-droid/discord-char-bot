@@ -1,0 +1,192 @@
+import discord
+from discord.ext import commands
+from discord import app_commands
+import google.generativeai as genai
+import sqlite3
+import os
+from .ui_elements import SaveProfileView
+
+# 대화 세션을 저장할 딕셔너리
+# key: user_id, value: {'worldview': str, 'messages': list}
+active_sessions = {}
+
+class CharCreator(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        self.db_file = os.path.join("data", "profiles.db")
+
+    def get_worldviews(self):
+        """데이터베이스에서 세계관 목록을 가져옵니다."""
+        conn = sqlite3.connect(self.db_file)
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM worldviews")
+        worldviews = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return worldviews
+
+    @app_commands.command(name="start", description="캐릭터 생성을 시작합니다. 세계관을 선택해주세요.")
+    @app_commands.describe(worldview="캐릭터를 생성할 세계관을 선택하세요.")
+    async def start(self, interaction: discord.Interaction, worldview: str):
+        """캐릭터 생성 세션을 시작하는 명령어"""
+        worldviews = self.get_worldviews()
+        if worldview not in worldviews:
+            await interaction.response.send_message(f"'{worldview}'는 유효한 세계관이 아닙니다. 다음 중에서 선택해주세요: {', '.join(worldviews)}", ephemeral=True)
+            return
+
+        user_id = interaction.user.id
+        if user_id in active_sessions:
+            await interaction.response.send_message("이미 진행 중인 캐릭터 생성 세션이 있습니다. 새로 시작하려면 먼저 `/quit`을 입력해주세요.", ephemeral=True)
+            return
+
+        # 세션 시작
+        active_sessions[user_id] = {
+            "worldview": worldview,
+            "messages": []
+        }
+        
+        await interaction.response.send_message(f"'{worldview}' 세계관으로 캐릭터 생성을 시작합니다! 어떤 캐릭터를 만들고 싶으신가요? 자유롭게 이야기해주세요.", ephemeral=True)
+
+    @app_commands.command(name="generate", description="현재 대화 내용으로 캐릭터 프로필을 생성합니다.")
+    async def generate(self, interaction: discord.Interaction):
+        """대화 내용을 바탕으로 캐릭터 프로필을 생성합니다."""
+        user_id = interaction.user.id
+        if user_id not in active_sessions:
+            await interaction.response.send_message("시작된 캐릭터 생성 세션이 없습니다. 먼저 `/start`를 이용해 대화를 시작해주세요.", ephemeral=True)
+            return
+
+        session = active_sessions[user_id]
+        if not session['messages']:
+            await interaction.response.send_message("프로필을 생성하기에는 대화 내용이 너무 적습니다. 캐릭터에 대해 더 이야기해주세요.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True) # 응답 시간을 확보합니다.
+
+        try:
+            # 시스템 지침: 최종 프로필 생성을 위한 상세 지시
+            system_instruction = f"""You are a creative novelist. Based on the entire following conversation, generate a detailed character profile for the '{{session['worldview']}}' universe.
+The profile should be well-structured and ready to be used in a story. Organize the information clearly.
+
+The final output should be a comprehensive profile that includes, but is not limited to, the following sections:
+- **Name:**
+- **Appearance:**
+- **Personality:**
+- **Abilities/Skills:**
+- **Backstory:**
+- **Equipment/Items:**
+
+Synthesize all the details provided by the user and your creative suggestions into a coherent and compelling character sheet. The tone should be descriptive and engaging, suitable for a novel."""
+            
+            model = genai.GenerativeModel(
+                'gemini-2.5-pro',
+                system_instruction=system_instruction
+            )
+            
+            # 봇의 첫 프롬프트를 포함한 전체 대화 내역 구성
+            initial_bot_prompt = {"role": "model", "parts": ["어떤 캐릭터를 만들고 싶으신가요? 자유롭게 이야기해주세요."]}
+            full_history = [initial_bot_prompt] + session['messages']
+
+            response = await model.generate_content_async(full_history)
+            
+            # 생성된 프로필을 보기 좋은 임베드로 만듭니다.
+            embed = discord.Embed(
+                title="✨ 캐릭터 프로필 생성 완료!",
+                description=response.text,
+                color=discord.Color.gold()
+            )
+            embed.set_footer(text=f"{interaction.user.display_name}님의 캐릭터")
+
+            # 생성된 프로필을 봇의 전역 변수에 저장
+            self.bot.last_generated_profiles[user_id] = {
+                "worldview_name": session['worldview'],
+                "profile_data": response.text
+            }
+            
+            await interaction.followup.send(embed=embed, view=SaveProfileView()) # 저장 버튼이 있는 View 추가
+
+            # 프로필 생성 후 세션 종료
+            del active_sessions[user_id]
+
+        except Exception as e:
+            print(f"프로필 생성 중 오류 발생: {e}")
+            await interaction.followup.send("죄송합니다, 프로필을 생성하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
+
+
+    @app_commands.command(name="quit", description="진행 중인 캐릭터 생성을 종료합니다.")
+    async def quit(self, interaction: discord.Interaction):
+        """캐릭터 생성 세션을 종료하는 명령어"""
+        user_id = interaction.user.id
+        if user_id in active_sessions:
+            del active_sessions[user_id]
+            await interaction.response.send_message("캐릭터 생성이 종료되었습니다. 또 이용해주셔서 감사합니다!", ephemeral=True)
+        else:
+            await interaction.response.send_message("시작된 캐릭터 생성 세션이 없습니다.", ephemeral=True)
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        """사용자 메시지를 감지하고 대화를 이어갑니다."""
+        # 봇 자신의 메시지, 또는 다른 명령어는 무시
+        if message.author == self.bot.user or message.content.startswith('/'):
+            return
+
+        user_id = message.author.id
+        if user_id in active_sessions:
+            # DM 채널이거나 봇을 멘션한 경우에만 응답
+            if isinstance(message.channel, discord.DMChannel) or self.bot.user.mentioned_in(message):
+                async with message.channel.typing():
+                    session = active_sessions[user_id]
+                    
+                    # 멘션을 제외한 실제 메시지 내용 추출
+                    content = message.content.replace(f'<@!{self.bot.user.id}>', '').replace(f'<@{self.bot.user.id}>', '').strip()
+                    if not content: # 멘션만 있고 내용이 없으면 무시
+                        return
+                    
+                    session['messages'].append({"role": "user", "parts": [content]})
+
+                    # 데이터베이스에서 세계관 설명 가져오기
+                    conn = sqlite3.connect(self.db_file)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT description FROM worldviews WHERE name = ?", (session['worldview'],))
+                    result = cursor.fetchone()
+                    conn.close()
+                    worldview_desc = result[0] if result else "A generic fantasy world."
+
+                    # Gemini를 위한 시스템 지침 설정
+                    # Gemini를 위한 시스템 지침 설정: 대화형 AI 역할 부여
+                    system_instruction = f"""You are a creative novelist brainstorming for your next project, targeting a male audience in their 20s.
+The story is set within the '{{session['worldview']}}' universe.
+
+Your goal is to collaborate with the user to build a compelling character.
+Base the character's details on the user's input, but be ready to offer creative and inspiring suggestions if they ask for help.
+Your tone should be encouraging and collaborative.
+
+Here is the detailed setting for the world:
+---
+{{worldview_desc}}
+---
+"""
+                    
+                    try:
+                        model = genai.GenerativeModel(
+                            'gemini-2.5-pro',
+                            system_instruction=system_instruction
+                        )
+                        
+                        # 봇의 첫 프롬프트를 포함한 전체 대화 내역 구성
+                        initial_bot_prompt = {"role": "model", "parts": ["어떤 캐릭터를 만들고 싶으신가요? 자유롭게 이야기해주세요."]}
+                        full_history = [initial_bot_prompt] + session['messages']
+
+                        response = await model.generate_content_async(full_history)
+                        bot_response = response.text
+                        
+                        # 봇의 응답을 세션에 기록
+                        session['messages'].append({"role": "model", "parts": [bot_response]})
+                        
+                        await message.channel.send(bot_response)
+
+                    except Exception as e:
+                        print(f"Gemini API 호출 중 오류 발생: {e}")
+                        await message.channel.send("죄송합니다, 아이디어를 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
+
+
+async def setup(bot: commands._Bot):
+    await bot.add_cog(CharCreator(bot))
