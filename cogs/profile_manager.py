@@ -16,6 +16,24 @@ class ProfileManager(commands.Cog):
 
     worldview_group = app_commands.Group(name="worldview", description="세계관 프리셋을 관리합니다.")
 
+    @worldview_group.command(name="create", description="새로운 세계관을 생성합니다.")
+    @app_commands.describe(name="새 세계관의 이름", description="새 세계관에 대한 간략한 설명")
+    async def worldview_create(self, interaction: discord.Interaction, name: str, description: str):
+        """새로운 세계관을 데이터베이스에 추가합니다."""
+        await interaction.response.defer(ephemeral=True)
+        conn = sqlite3.connect(self.db_file)
+        cursor = conn.cursor()
+        try:
+            cursor.execute("INSERT INTO worldviews (name, description) VALUES (?, ?)", (name, description))
+            conn.commit()
+            await interaction.followup.send(f"✅ 새로운 세계관 '{name}'(이)가 성공적으로 생성되었습니다!")
+        except sqlite3.IntegrityError:
+            await interaction.followup.send(f"❌ 오류: '{name}'(이)라는 이름의 세계관이 이미 존재합니다.")
+        except Exception as e:
+            await interaction.followup.send(f"❌ 오류: 세계관을 생성하는 중 문제가 발생했습니다: {e}")
+        finally:
+            conn.close()
+
     @worldview_group.command(name="edit", description="기존 세계관의 설명을 수정합니다.")
     @app_commands.describe(name="수정할 세계관 이름", description="새로운 세계관 설명")
     async def worldview_edit(self, interaction: discord.Interaction, name: str, description: str):
