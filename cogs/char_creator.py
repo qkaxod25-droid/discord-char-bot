@@ -67,7 +67,7 @@ class CharCreator(commands.Cog):
             await interaction.followup.send("생성된 세계관이 없습니다. 먼저 `/worldview create` 명령어로 세계관을 만들어주세요.", ephemeral=True)
             return
 
-        view = WorldviewSelectView(worldviews)
+        view = WorldviewSelectView(worldviews, custom_id="start_worldview_select")
         await interaction.followup.send("캐릭터를 생성할 세계관을 선택해주세요.", view=view, ephemeral=True)
 
     async def start_session(self, interaction: discord.Interaction, worldview: str):
@@ -77,6 +77,7 @@ class CharCreator(commands.Cog):
 
         if user_id in active_sessions:
             print(f"[Log] User {user_id} tried to start a session while another is active.")
+            # The interaction has already been deferred, so we use followup.
             await interaction.followup.send("이미 진행 중인 캐릭터 생성 세션이 있습니다. 새로 시작하려면 먼저 `/quit`을 입력해주세요.", ephemeral=True)
             return
 
@@ -93,10 +94,12 @@ class CharCreator(commands.Cog):
             # 사용자에게 DM으로 안내 메시지 전송
             await interaction.user.send(f"'{worldview}' 세계관으로 캐릭터 생성을 시작합니다! DM으로 저와 자유롭게 대화하며 캐릭터를 만들어보세요. 대화를 마치고 싶으시면 언제든지 `/quit`을 입력해주세요.")
             # 원래 상호작용에는 확인 메시지 수정
+            # Since the original interaction was deferred, we edit it.
             await interaction.edit_original_response(content="캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", view=None)
             print(f"[Log] DM sent to user {user_id} to start session.")
         except discord.Forbidden:
             print(f"[Log] Cannot send DM to user {user_id}. Deleting session.")
+            # Edit the original response to inform the user.
             await interaction.edit_original_response(content="DM을 보낼 수 없습니다. 봇의 DM을 허용해주세요.", view=None)
             if user_id in active_sessions:
                 del active_sessions[user_id]
@@ -119,15 +122,19 @@ class CharCreator(commands.Cog):
         try:
             if interaction.type == discord.InteractionType.component:
                 custom_id = interaction.data.get("custom_id")
-                if custom_id == "worldview_select":
-                    # 이 상호작용이 CharCreator에서 시작되었는지 확인하는 더 나은 방법이 필요하지만,
-                    # 현재로서는 custom_id로만 구분합니다.
+                if custom_id == "start_worldview_select":
+                    # Defer the interaction first to prevent timeouts
+                    await interaction.response.defer(thinking=True, ephemeral=True)
                     selected_worldview = interaction.data['values'][0]
                     await self.start_session(interaction, selected_worldview)
         except Exception as e:
             print(f"on_interaction 처리 중 오류 발생: {e}")
+            # Check if the interaction can still be responded to
             if not interaction.response.is_done():
-                await interaction.response.send_message("상호작용 처리 중 오류가 발생했습니다.", ephemeral=True)
+                try:
+                    await interaction.response.send_message("상호작용 처리 중 오류가 발생했습니다.", ephemeral=True)
+                except discord.InteractionResponded:
+                    await interaction.followup.send("상호작용 처리 중 오류가 발생했습니다.", ephemeral=True)
 
 
     @commands.Cog.listener()

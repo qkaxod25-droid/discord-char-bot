@@ -104,11 +104,11 @@ class SaveProfileView(discord.ui.View):
         await interaction.response.send_modal(modal)
 
 class WorldviewSelectView(discord.ui.View):
-    def __init__(self, worldviews: list):
+    def __init__(self, worldviews: list, custom_id: str = "worldview_select"):
         super().__init__(timeout=180)
         
         options = [discord.SelectOption(label=name) for name in worldviews]
-        self.select = discord.ui.Select(placeholder="세계관을 선택하세요...", options=options, custom_id="worldview_select")
+        self.select = discord.ui.Select(placeholder="세계관을 선택하세요...", options=options, custom_id=custom_id)
         self.add_item(self.select)
 
 class ProfileSelectView(discord.ui.View):

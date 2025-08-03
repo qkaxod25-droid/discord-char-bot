@@ -64,7 +64,7 @@ class ProfileManager(commands.Cog):
             await interaction.followup.send("수정할 세계관이 없습니다.", ephemeral=True)
             return
         
-        view = WorldviewSelectView(worldviews)
+        view = WorldviewSelectView(worldviews, custom_id="manage_worldview_select")
         await interaction.followup.send("설명을 수정할 세계관을 선택하세요.", view=view, ephemeral=True)
 
 
@@ -114,7 +114,7 @@ class ProfileManager(commands.Cog):
             await interaction.followup.send("볼 수 있는 세계관이 없습니다.", ephemeral=True)
             return
 
-        view = WorldviewSelectView(worldviews)
+        view = WorldviewSelectView(worldviews, custom_id="manage_worldview_select")
         await interaction.followup.send("상세 설명을 볼 세계관을 선택하세요.", view=view, ephemeral=True)
 
     async def _show_worldview_description(self, interaction: discord.Interaction, name: str):
@@ -183,14 +183,15 @@ class ProfileManager(commands.Cog):
 
         custom_id = interaction.data.get("custom_id")
         
-        if custom_id == "worldview_select":
+        if custom_id == "manage_worldview_select":
             selected_name = interaction.data['values'][0]
-            original_message = interaction.message.content.lower()
-            # 'defer'를 먼저 호출하여 타임아웃 방지
-            await interaction.response.defer(ephemeral=True, thinking=True)
+            # The interaction is already deferred from the command, so we just process
             
-            original_message = interaction.message.content.lower()
-            if "수정할 세계관" in original_message:
+            # We need to know what the original command was. We can check the message content.
+            # This is a bit brittle, a better way might be to use different custom_ids for each command.
+            original_message_content = interaction.message.content
+            
+            if "수정할 세계관" in original_message_content:
                 conn = sqlite3.connect(self.db_file)
                 cursor = conn.cursor()
                 cursor.execute("SELECT description FROM worldviews WHERE name = ?", (selected_name,))
@@ -202,7 +203,7 @@ class ProfileManager(commands.Cog):
                 else:
                     await interaction.followup.send("오류: 해당 세계관을 찾을 수 없습니다.", ephemeral=True)
 
-            elif "상세 설명을 볼 세계관" in original_message:
+            elif "상세 설명을 볼 세계관" in original_message_content:
                 await self._show_worldview_description(interaction, selected_name)
 
         elif custom_id == "profile_select":
