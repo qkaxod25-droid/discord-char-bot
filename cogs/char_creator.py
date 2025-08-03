@@ -56,21 +56,26 @@ class CharCreator(commands.Cog):
         conn.close()
         return worldviews
 
-    @app_commands.command(name="start", description="캐릭터 생성을 시작합니다. 세계관을 선택해주세요.")
-    @app_commands.describe(worldview="캐릭터를 생성할 세계관을 선택하세요.")
-    async def start(self, interaction: discord.Interaction, worldview: str):
-        """캐릭터 생성 세션을 시작하는 명령어"""
-        print(f"[Log] User {interaction.user.id} attempting to start session with worldview: {worldview}")
+    @app_commands.command(name="start", description="캐릭터 생성을 시작합니다. 드롭다운에서 세계관을 선택해주세요.")
+    async def start(self, interaction: discord.Interaction):
+        """사용 가능한 세계관 목록을 드롭다운으로 보여주고 선택하게 합니다."""
+        print(f"[Log] User {interaction.user.id} initiated /start command.")
         worldviews = self.get_worldviews()
-        if worldview not in worldviews:
-            print(f"[Log] Invalid worldview '{worldview}' for user {interaction.user.id}")
-            await interaction.response.send_message(f"'{worldview}'는 유효한 세계관이 아닙니다. 다음 중에서 선택해주세요: {', '.join(worldviews)}", ephemeral=True)
+        if not worldviews:
+            await interaction.response.send_message("생성된 세계관이 없습니다. 먼저 `/worldview create` 명령어로 세계관을 만들어주세요.", ephemeral=True)
             return
 
+        view = WorldviewSelectView(worldviews, callback_command="start_session")
+        await interaction.response.send_message("캐릭터를 생성할 세계관을 선택해주세요.", view=view, ephemeral=True)
+
+    async def start_session(self, interaction: discord.Interaction, worldview: str):
+        """실제 캐릭터 생성 세션을 시작하는 내부 함수"""
         user_id = interaction.user.id
+        print(f"[Log] User {user_id} selected worldview '{worldview}' to start session.")
+
         if user_id in active_sessions:
             print(f"[Log] User {user_id} tried to start a session while another is active.")
-            await interaction.response.send_message("이미 진행 중인 캐릭터 생성 세션이 있습니다. 새로 시작하려면 먼저 `/quit`을 입력해주세요.", ephemeral=True)
+            await interaction.followup.send("이미 진행 중인 캐릭터 생성 세션이 있습니다. 새로 시작하려면 먼저 `/quit`을 입력해주세요.", ephemeral=True)
             return
 
         # 세션 시작
@@ -85,12 +90,12 @@ class CharCreator(commands.Cog):
         try:
             # 사용자에게 DM으로 안내 메시지 전송
             await interaction.user.send(f"'{worldview}' 세계관으로 캐릭터 생성을 시작합니다! DM으로 저와 자유롭게 대화하며 캐릭터를 만들어보세요. 대화를 마치고 싶으시면 언제든지 `/quit`을 입력해주세요.")
-            # 상호작용에는 확인 메시지 전송
-            await interaction.response.send_message("캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", ephemeral=True)
+            # 원래 상호작용에는 확인 메시지 수정
+            await interaction.edit_original_response(content="캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", view=None)
             print(f"[Log] DM sent to user {user_id} to start session.")
         except discord.Forbidden:
             print(f"[Log] Cannot send DM to user {user_id}. Deleting session.")
-            await interaction.response.send_message("DM을 보낼 수 없습니다. 봇의 DM을 허용해주세요.", ephemeral=True)
+            await interaction.edit_original_response(content="DM을 보낼 수 없습니다. 봇의 DM을 허용해주세요.", view=None)
             if user_id in active_sessions:
                 del active_sessions[user_id]
 
@@ -105,6 +110,23 @@ class CharCreator(commands.Cog):
             await interaction.response.send_message("캐릭터 생성이 종료되었습니다. 또 이용해주셔서 감사합니다!", ephemeral=True)
         else:
             await interaction.response.send_message("시작된 캐릭터 생성 세션이 없습니다.", ephemeral=True)
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        """드롭다운 선택과 같은 상호작용을 처리합니다."""
+        try:
+            if interaction.type == discord.InteractionType.component:
+                custom_id = interaction.data.get("custom_id")
+                if custom_id == "worldview_select":
+                    # 이 상호작용이 CharCreator에서 시작되었는지 확인하는 더 나은 방법이 필요하지만,
+                    # 현재로서는 custom_id로만 구분합니다.
+                    selected_worldview = interaction.data['values'][0]
+                    await self.start_session(interaction, selected_worldview)
+        except Exception as e:
+            print(f"on_interaction 처리 중 오류 발생: {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message("상호작용 처리 중 오류가 발생했습니다.", ephemeral=True)
+
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
