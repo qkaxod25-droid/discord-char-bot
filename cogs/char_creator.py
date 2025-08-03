@@ -99,22 +99,22 @@ class CharCreator(commands.Cog):
             await interaction.user.send(f"'{worldview}' 세계관으로 캐릭터 생성을 시작합니다! DM으로 저와 자유롭게 대화하며 캐릭터를 만들어보세요. 대화를 마치고 싶으시면 언제든지 `/quit`을 입력해주세요.")
             print("[Interaction Trace] DM sent successfully. Attempting to edit original response.")
             
-            # 원래 상호작용에는 확인 메시지 수정
-            await interaction.edit_original_response(content="캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", view=None)
-            print("[Interaction Trace] Original response edited successfully.")
+            # 후속 응답으로 확인 메시지 전송 (ephemeral은 defer와 일치시켜야 함)
+            await interaction.followup.send(content="캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", ephemeral=True)
+            print("[Interaction Trace] Follow-up response sent successfully.")
             print(f"[Log] DM sent to user {user_id} to start session.")
         except discord.Forbidden:
             print(f"[Log] Cannot send DM to user {user_id}. Deleting session.")
             traceback.print_exc()
-            # DM 차단 시 사용자에게 안내
-            await interaction.edit_original_response(content="DM을 보낼 수 없습니다. 서버 설정에서 '서버 멤버가 보내는 다이렉트 메시지 허용'을 켜주세요.", view=None)
+            # DM 차단 시 후속 응답으로 사용자에게 안내
+            await interaction.followup.send(content="DM을 보낼 수 없습니다. 서버 설정에서 '서버 멤버가 보내는 다이렉트 메시지 허용'을 켜주세요.", ephemeral=True)
             if user_id in active_sessions:
                 del active_sessions[user_id]
         except Exception as e:
             print(f"[Log] An unexpected error occurred in start_session for user {user_id}: {e}")
             traceback.print_exc()
-            # 예상치 못한 오류 발생 시 사용자에게 안내
-            await interaction.edit_original_response(content="세션 시작 중 예상치 못한 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", view=None)
+            # 예상치 못한 오류 발생 시 후속 응답으로 사용자에게 안내
+            await interaction.followup.send(content="세션 시작 중 예상치 못한 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
             if user_id in active_sessions:
                 del active_sessions[user_id]
 
