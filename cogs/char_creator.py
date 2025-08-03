@@ -120,14 +120,18 @@ class CharCreator(commands.Cog):
             print(f"[Log] Worldview description for '{session['worldview']}' loaded for profile generation.")
 
             # 시스템 지침: 최종 프로필 생성을 위한 상세 지시
-            system_instruction = f"""You are a creative novelist. Based on the entire following conversation, generate a detailed character profile for the '{session['worldview']}' universe.
-The profile must strictly follow the template below. Synthesize all the details provided by the user and your creative suggestions into a coherent and compelling character sheet.
-The tone should be descriptive and engaging, suitable for a novel.
+            system_instruction = f"""You are a profile creation expert. Your task is to generate a character profile based on the user's conversation.
+You MUST follow the provided template EXACTLY. Do not deviate from the structure. Fill in every section based on the conversation.
 
-Here is the detailed setting for the world:
+**World Setting:**
 ---
 {worldview_desc}
 ---
+
+**Conversation History:**
+(The user's conversation will be provided in the prompt history)
+
+**CRITICAL INSTRUCTION: Generate the final output using this exact template:**
 
 **Template:**
 
@@ -149,7 +153,7 @@ Here is the detailed setting for the world:
 - 주요 인맥 및 가족 요약:
 - 주요 인물 1~2명과의 관계 설명 (선택):
 
-Only generate the '주요 인물 1~2명과의 관계 설명 (선택):' section if the user has explicitly provided information about other characters or relationships. Otherwise, omit this specific line.
+**Note:** Only generate the '주요 인물 1~2명과의 관계 설명 (선택):' section if the user has explicitly provided information about other characters or relationships. Otherwise, omit this specific line entirely from the output.
 """
             
             model = genai.GenerativeModel(
