@@ -58,13 +58,14 @@ class ProfileManager(commands.Cog):
     async def worldview_edit_select(self, interaction: discord.Interaction):
         """수정할 세계관을 선택하는 드롭다운을 보여줍니다."""
         print(f"[Log] User {interaction.user.id} initiated /worldview edit command.")
+        await interaction.response.defer(ephemeral=True, thinking=True)
         worldviews = self._get_worldview_names()
         if not worldviews:
-            await interaction.response.send_message("수정할 세계관이 없습니다.", ephemeral=True)
+            await interaction.followup.send("수정할 세계관이 없습니다.", ephemeral=True)
             return
         
         view = WorldviewSelectView(worldviews)
-        await interaction.response.send_message("설명을 수정할 세계관을 선택하세요.", view=view, ephemeral=True)
+        await interaction.followup.send("설명을 수정할 세계관을 선택하세요.", view=view, ephemeral=True)
 
 
     @worldview_group.command(name="list", description="저장된 모든 세계관의 이름을 보여줍니다.")
@@ -107,13 +108,14 @@ class ProfileManager(commands.Cog):
     async def worldview_view_select(self, interaction: discord.Interaction):
         """상세 설명을 볼 세계관을 선택하는 드롭다운을 보여줍니다."""
         print(f"[Log] User {interaction.user.id} initiated /worldview view command.")
+        await interaction.response.defer(ephemeral=True, thinking=True)
         worldviews = self._get_worldview_names()
         if not worldviews:
-            await interaction.response.send_message("볼 수 있는 세계관이 없습니다.", ephemeral=True)
+            await interaction.followup.send("볼 수 있는 세계관이 없습니다.", ephemeral=True)
             return
 
         view = WorldviewSelectView(worldviews)
-        await interaction.response.send_message("상세 설명을 볼 세계관을 선택하세요.", view=view, ephemeral=True)
+        await interaction.followup.send("상세 설명을 볼 세계관을 선택하세요.", view=view, ephemeral=True)
 
     async def _show_worldview_description(self, interaction: discord.Interaction, name: str):
         """특정 세계관의 상세 설명을 보여주는 내부 함수"""
@@ -240,13 +242,14 @@ class ProfileManager(commands.Cog):
     async def profiles_management(self, interaction: discord.Interaction):
         """관리할 프로필을 선택하는 드롭다운을 보여줍니다."""
         print(f"[Log] User {interaction.user.id} initiated /profiles command.")
+        await interaction.response.defer(ephemeral=True, thinking=True)
         profiles = self._get_profile_names(interaction.user.id)
         if not profiles:
-            await interaction.response.send_message("저장된 프로필이 없습니다.", ephemeral=True)
+            await interaction.followup.send("저장된 프로필이 없습니다.", ephemeral=True)
             return
         
         view = ProfileSelectView(profiles)
-        await interaction.response.send_message("관리할 캐릭터 프로필을 선택하세요.", view=view, ephemeral=True)
+        await interaction.followup.send("관리할 캐릭터 프로필을 선택하세요.", view=view, ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
