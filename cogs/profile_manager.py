@@ -70,18 +70,35 @@ class ProfileManager(commands.Cog):
 
     @worldview_group.command(name="list", description="저장된 모든 세계관의 목록과 설명을 보여줍니다.")
     async def worldview_list(self, interaction: discord.Interaction):
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, description FROM worldviews ORDER BY id")
-        worldviews = cursor.fetchall()
-        conn.close()
-        if not worldviews:
-            await interaction.response.send_message("저장된 세계관이 없습니다.", ephemeral=True)
-            return
-        embed = discord.Embed(title="🌌 세계관 목록", color=discord.Color.purple())
-        for name, desc in worldviews:
-            embed.add_field(name=name, value=desc, inline=False)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        print(f"[Log] User {interaction.user.id} requested worldview list.")
+        await interaction.response.defer(ephemeral=True)
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_file)
+            cursor = conn.cursor()
+            print("[Log] DB connected for listing worldviews.")
+            cursor.execute("SELECT name, description FROM worldviews ORDER BY id")
+            worldviews = cursor.fetchall()
+            
+            if not worldviews:
+                print("[Log] No worldviews found.")
+                await interaction.followup.send("저장된 세계관이 없습니다.")
+                return
+                
+            embed = discord.Embed(title="🌌 세계관 목록", color=discord.Color.purple())
+            for name, desc in worldviews:
+                embed.add_field(name=name, value=desc, inline=False)
+            
+            print(f"[Log] Sending worldview list to user {interaction.user.id}.")
+            await interaction.followup.send(embed=embed)
+            
+        except Exception as e:
+            print(f"[Log] Exception on listing worldviews: {e}")
+            await interaction.followup.send(f"❌ 오류: 세계관 목록을 불러오는 중 문제가 발생했습니다: {e}")
+        finally:
+            if conn:
+                conn.close()
+                print("[Log] DB connection closed for listing worldviews.")
 
     @app_commands.command(name="profiles", description="내가 저장한 모든 캐릭터 프로필 목록을 봅니다.")
     async def list_profiles(self, interaction: discord.Interaction):
