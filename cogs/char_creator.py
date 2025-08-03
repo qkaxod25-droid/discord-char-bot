@@ -9,15 +9,14 @@ import time
 import traceback
 from .ui_elements import SaveProfileView, WorldviewSelectView
 
-# 대화 세션을 저장할 딕셔너리
-# key: user_id, value: {'worldview': str, 'messages': list, 'last_message_time': float, 'timeout_notified': bool}
-active_sessions = {}
+# CharCreator 클래스 내에서 세션을 관리하도록 변경합니다.
 
 class CharCreator(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.db_file = os.path.join("data", "profiles.db")
-        self.active_sessions = active_sessions # 전역 변수를 인스턴스 변수에 할당
+        # active_sessions를 클래스 인스턴스 변수로 직접 초기화
+        self.active_sessions = {}
         self.timeout_task = self.bot.loop.create_task(self.check_inactive_sessions())
 
     def cog_unload(self):
@@ -57,6 +56,9 @@ class CharCreator(commands.Cog):
         cursor.execute("SELECT name FROM worldviews")
         worldviews = [row[0] for row in cursor.fetchall()]
         conn.close()
+        print(f"[DB Log] Fetched worldviews from DB: {worldviews}") # 로그 추가
+        if not worldviews:
+            print("[DB Log] No worldviews found in the database.") # 로그 추가
         return worldviews
 
     @app_commands.command(name="start", description="캐릭터 생성을 시작합니다. 드롭다운에서 세계관을 선택해주세요.")
@@ -108,13 +110,21 @@ class CharCreator(commands.Cog):
                     print(f"[Log] Message from {user_id} added to session history.")
 
                     # 데이터베이스에서 세계관 설명 가져오기
+                    # [Debug] Log the worldview name before querying
+                    worldview_to_query = session.get('worldview')
+                    print(f"[DB Log] Attempting to fetch description for worldview: '{worldview_to_query}' for user {user_id}")
+
                     conn = sqlite3.connect(self.db_file)
                     cursor = conn.cursor()
-                    cursor.execute("SELECT description FROM worldviews WHERE name = ?", (session['worldview'],))
+                    cursor.execute("SELECT description FROM worldviews WHERE name = ?", (worldview_to_query,))
                     result = cursor.fetchone()
                     conn.close()
-                    worldview_desc = result[0] if result else "A generic fantasy world."
-                    print(f"[Log] Worldview description for '{session['worldview']}' loaded for user {user_id}.")
+
+                    # [Debug] Log the result of the query
+                    print(f"[DB Log] Query result for '{worldview_to_query}': {result}")
+
+                    worldview_desc = result[0] if result else "설명을 찾을 수 없습니다."
+                    print(f"[Log] Worldview description for '{worldview_to_query}' loaded for user {user_id}. Description: {worldview_desc[:50]}...")
 
                     # Gemini를 위한 시스템 지침 설정
                     # Gemini를 위한 시스템 지침 설정: 대화형 AI 역할 부여
