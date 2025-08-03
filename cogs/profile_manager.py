@@ -3,60 +3,10 @@ from discord.ext import commands
 from discord import app_commands
 import sqlite3
 import os
-from .ui_elements import SaveProfileView
-
-class WorldviewEditModal(discord.ui.Modal, title="세계관 설명 수정"):
-    def __init__(self, db_file: str, worldview_name: str, current_description: str):
-        super().__init__()
-        self.db_file = db_file
-        self.worldview_name = worldview_name
-        self.description_input = discord.ui.TextInput(
-            label=f"'{worldview_name}'의 새로운 설명",
-            style=discord.TextStyle.paragraph,
-            default=current_description,
-            required=True,
-            max_length=1024
-        )
-        self.add_item(self.description_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        new_description = self.description_input.value
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        try:
-            cursor.execute("UPDATE worldviews SET description = ? WHERE name = ?", (new_description, self.worldview_name))
-            conn.commit()
-            await interaction.response.send_message(f"✅ '{self.worldview_name}' 세계관의 설명이 성공적으로 수정되었습니다.", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"❌ 오류: 설명을 수정하는 중 문제가 발생했습니다: {e}", ephemeral=True)
-        finally:
-            conn.close()
-
-class ProfileEditModal(discord.ui.Modal, title="프로필 수정"):
-    def __init__(self, db_file: str, profile_name: str, current_data: str):
-        super().__init__()
-        self.db_file = db_file
-        self.profile_name = profile_name
-        self.profile_data_input = discord.ui.TextInput(
-            label=f"'{profile_name}'의 프로필 내용",
-            style=discord.TextStyle.paragraph,
-            default=current_data,
-            required=True
-        )
-        self.add_item(self.profile_data_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        new_data = self.profile_data_input.value
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        try:
-            cursor.execute("UPDATE profiles SET profile_data = ? WHERE user_id = ? AND character_name = ?", (new_data, interaction.user.id, self.profile_name))
-            conn.commit()
-            await interaction.response.send_message(f"✅ '{self.profile_name}' 프로필이 성공적으로 수정되었습니다.", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"❌ 오류: 프로필을 수정하는 중 문제가 발생했습니다: {e}", ephemeral=True)
-        finally:
-            conn.close()
+from .ui_elements import (
+    SaveProfileView, WorldviewSelectView, ProfileSelectView,
+    ProfileManageView, WorldviewConfirmEditView, ProfileConfirmEditView
+)
 
 class ProfileManager(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -234,6 +184,10 @@ class ProfileManager(commands.Cog):
         if custom_id == "worldview_select":
             selected_name = interaction.data['values'][0]
             original_message = interaction.message.content.lower()
+            # 'defer'를 먼저 호출하여 타임아웃 방지
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
+            original_message = interaction.message.content.lower()
             if "수정할 세계관" in original_message:
                 conn = sqlite3.connect(self.db_file)
                 cursor = conn.cursor()
@@ -241,12 +195,12 @@ class ProfileManager(commands.Cog):
                 result = cursor.fetchone()
                 conn.close()
                 if result:
-                    modal = WorldviewEditModal(self.db_file, selected_name, result[0])
-                    await interaction.response.send_modal(modal)
+                    view = WorldviewConfirmEditView(self.db_file, selected_name, result[0])
+                    await interaction.followup.send(f"'{selected_name}' 세계관을 수정하려면 아래 버튼을 누르세요.", view=view, ephemeral=True)
                 else:
-                    await interaction.response.send_message("오류: 해당 세계관을 찾을 수 없습니다.", ephemeral=True)
+                    await interaction.followup.send("오류: 해당 세계관을 찾을 수 없습니다.", ephemeral=True)
+
             elif "상세 설명을 볼 세계관" in original_message:
-                await interaction.response.defer(ephemeral=True)
                 await self._show_worldview_description(interaction, selected_name)
 
         elif custom_id == "profile_select":
@@ -260,6 +214,7 @@ class ProfileManager(commands.Cog):
             await self._show_profile(interaction, profile_name)
 
         elif custom_id == "edit_profile":
+            await interaction.response.defer(ephemeral=True, thinking=True)
             profile_name = interaction.message.content.split('**')[1] # 임시방편
             conn = sqlite3.connect(self.db_file)
             cursor = conn.cursor()
@@ -267,10 +222,10 @@ class ProfileManager(commands.Cog):
             result = cursor.fetchone()
             conn.close()
             if result:
-                modal = ProfileEditModal(self.db_file, profile_name, result[0])
-                await interaction.response.send_modal(modal)
+                view = ProfileConfirmEditView(self.db_file, profile_name, result[0])
+                await interaction.followup.send(f"'{profile_name}' 프로필을 수정하려면 아래 버튼을 누르세요.", view=view, ephemeral=True)
             else:
-                await interaction.response.send_message("오류: 해당 프로필을 찾을 수 없습니다.", ephemeral=True)
+                await interaction.followup.send("오류: 해당 프로필을 찾을 수 없습니다.", ephemeral=True)
 
     def _get_profile_names(self, user_id: int):
         """데이터베이스에서 특정 사용자의 모든 프로필 이름을 가져옵니다."""

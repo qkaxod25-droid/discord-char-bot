@@ -2,6 +2,59 @@ import discord
 import sqlite3
 import os
 
+class WorldviewEditModal(discord.ui.Modal, title="세계관 설명 수정"):
+    def __init__(self, db_file: str, worldview_name: str, current_description: str):
+        super().__init__()
+        self.db_file = db_file
+        self.worldview_name = worldview_name
+        self.description_input = discord.ui.TextInput(
+            label=f"'{worldview_name}'의 새로운 설명",
+            style=discord.TextStyle.paragraph,
+            default=current_description,
+            required=True,
+            max_length=1024
+        )
+        self.add_item(self.description_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        new_description = self.description_input.value
+        conn = sqlite3.connect(self.db_file)
+        cursor = conn.cursor()
+        try:
+            cursor.execute("UPDATE worldviews SET description = ? WHERE name = ?", (new_description, self.worldview_name))
+            conn.commit()
+            await interaction.response.send_message(f"✅ '{self.worldview_name}' 세계관의 설명이 성공적으로 수정되었습니다.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ 오류: 설명을 수정하는 중 문제가 발생했습니다: {e}", ephemeral=True)
+        finally:
+            conn.close()
+
+class ProfileEditModal(discord.ui.Modal, title="프로필 수정"):
+    def __init__(self, db_file: str, profile_name: str, current_data: str):
+        super().__init__()
+        self.db_file = db_file
+        self.profile_name = profile_name
+        self.profile_data_input = discord.ui.TextInput(
+            label=f"'{profile_name}'의 프로필 내용",
+            style=discord.TextStyle.paragraph,
+            default=current_data,
+            required=True
+        )
+        self.add_item(self.profile_data_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        new_data = self.profile_data_input.value
+        conn = sqlite3.connect(self.db_file)
+        cursor = conn.cursor()
+        try:
+            cursor.execute("UPDATE profiles SET profile_data = ? WHERE user_id = ? AND character_name = ?", (new_data, interaction.user.id, self.profile_name))
+            conn.commit()
+            await interaction.response.send_message(f"✅ '{self.profile_name}' 프로필이 성공적으로 수정되었습니다.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ 오류: 프로필을 수정하는 중 문제가 발생했습니다: {e}", ephemeral=True)
+        finally:
+            conn.close()
+
 class SaveProfileModal(discord.ui.Modal, title="캐릭터 이름 정하기"):
     character_name = discord.ui.TextInput(
         label="캐릭터의 이름을 입력하세요",
@@ -80,3 +133,27 @@ class ProfileManageView(discord.ui.View):
     async def edit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         # 이 버튼의 로직은 profile_manager.py의 on_interaction에서 처리됩니다.
         await interaction.response.defer()
+
+class WorldviewConfirmEditView(discord.ui.View):
+    def __init__(self, db_file: str, worldview_name: str, description: str):
+        super().__init__(timeout=180)
+        self.db_file = db_file
+        self.worldview_name = worldview_name
+        self.description = description
+
+    @discord.ui.button(label="✏️ 수정하기", style=discord.ButtonStyle.primary, custom_id="confirm_worldview_edit")
+    async def confirm_edit(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = WorldviewEditModal(self.db_file, self.worldview_name, self.description)
+        await interaction.response.send_modal(modal)
+
+class ProfileConfirmEditView(discord.ui.View):
+    def __init__(self, db_file: str, profile_name: str, profile_data: str):
+        super().__init__(timeout=180)
+        self.db_file = db_file
+        self.profile_name = profile_name
+        self.profile_data = profile_data
+
+    @discord.ui.button(label="✏️ 수정하기", style=discord.ButtonStyle.primary, custom_id="confirm_profile_edit")
+    async def confirm_edit(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = ProfileEditModal(self.db_file, self.profile_name, self.profile_data)
+        await interaction.response.send_modal(modal)
