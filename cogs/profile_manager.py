@@ -19,14 +19,15 @@ class ProfileManager(commands.Cog):
     @worldview_group.command(name="edit", description="기존 세계관의 설명을 수정합니다.")
     @app_commands.describe(name="수정할 세계관 이름", description="새로운 세계관 설명")
     async def worldview_edit(self, interaction: discord.Interaction, name: str, description: str):
+        await interaction.response.defer(ephemeral=True)
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         cursor.execute("UPDATE worldviews SET description = ? WHERE name = ?", (description, name))
         if cursor.rowcount > 0:
             conn.commit()
-            await interaction.response.send_message(f"'{name}' 세계관의 설명이 수정되었습니다.", ephemeral=True)
+            await interaction.followup.send(f"'{name}' 세계관의 설명이 수정되었습니다.")
         else:
-            await interaction.response.send_message(f"'{name}' 세계관을 찾을 수 없습니다.", ephemeral=True)
+            await interaction.followup.send(f"'{name}' 세계관을 찾을 수 없습니다.")
         conn.close()
 
     @worldview_group.command(name="list", description="저장된 모든 세계관의 목록과 설명을 보여줍니다.")
