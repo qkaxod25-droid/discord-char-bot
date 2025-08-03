@@ -120,20 +120,18 @@ class CharCreator(commands.Cog):
             print(f"[Log] Worldview description for '{session['worldview']}' loaded for profile generation.")
 
             # 시스템 지침: 최종 프로필 생성을 위한 상세 지시
-            system_instruction = f"""You are a profile creation expert. Your task is to generate a character profile based on the user's conversation.
-You MUST follow the provided template EXACTLY. Do not deviate from the structure. Fill in every section based on the conversation.
+            system_instruction = f"""Your only job is to fill out the provided template based on the conversation.
+- **Analyze the World Setting and Conversation History.**
+- **You MUST use the Korean template provided below.**
+- **Do NOT create new sections. Do NOT use English headers.**
+- **Fill in the information for each field. If information is missing, leave it blank.**
 
 **World Setting:**
 ---
 {worldview_desc}
 ---
 
-**Conversation History:**
-(The user's conversation will be provided in the prompt history)
-
-**CRITICAL INSTRUCTION: Generate the final output using this exact template:**
-
-**Template:**
+**Template to fill:**
 
 1. **기본 정보**
 - 이름 / 나이 / 성별:
@@ -153,11 +151,11 @@ You MUST follow the provided template EXACTLY. Do not deviate from the structure
 - 주요 인맥 및 가족 요약:
 - 주요 인물 1~2명과의 관계 설명 (선택):
 
-**Note:** Only generate the '주요 인물 1~2명과의 관계 설명 (선택):' section if the user has explicitly provided information about other characters or relationships. Otherwise, omit this specific line entirely from the output.
+**Rule for '인물 관계':** Only fill the '주요 인물 1~2명과의 관계 설명 (선택):' part if the user provided specific details about relationships. Otherwise, omit the line.
 """
             
             model = genai.GenerativeModel(
-                'gemini-2.5-pro',
+                'gemini-2.5-flash',
                 system_instruction=system_instruction
             )
             
@@ -258,7 +256,7 @@ Here is the detailed setting for the world:
                     try:
                         print("[Log] Generating content with Gemini...")
                         model = genai.GenerativeModel(
-                            'gemini-2.5-pro',
+                            'gemini-2.5-flash',
                             system_instruction=system_instruction
                         )
                         
