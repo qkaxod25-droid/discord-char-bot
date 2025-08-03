@@ -1,11 +1,14 @@
 import sqlite3
 import os
 
-DB_FILE = os.path.join("data", "profiles.db")
+# 프로젝트 루트를 기준으로 절대 경로 생성
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(ROOT_DIR, "data", "profiles.db")
 
 def initialize_database():
     """데이터베이스와 테이블을 초기화하고, 기본 세계관 프리셋을 추가합니다."""
-    os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
+    # data 디렉토리가 없으면 생성
+    os.makedirs(os.path.join(ROOT_DIR, "data"), exist_ok=True)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 

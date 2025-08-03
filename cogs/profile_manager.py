@@ -12,7 +12,9 @@ from .ui_elements import (
 class ProfileManager(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.db_file = os.path.join("data", "profiles.db")
+        # database.py에서 정의한 절대 경로를 사용
+        from database import DB_FILE
+        self.db_file = DB_FILE
         # 봇이 재시작되어도 View가 작동하도록 등록
         if not bot.persistent_views_added:
             bot.add_view(SaveProfileView())

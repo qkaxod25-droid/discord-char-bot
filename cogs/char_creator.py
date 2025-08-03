@@ -14,7 +14,9 @@ from .ui_elements import SaveProfileView, WorldviewSelectView
 class CharCreator(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.db_file = os.path.join("data", "profiles.db")
+        # database.py에서 정의한 절대 경로를 사용
+        from database import DB_FILE
+        self.db_file = DB_FILE
         # active_sessions를 클래스 인스턴스 변수로 직접 초기화
         self.active_sessions = {}
         self.timeout_task = self.bot.loop.create_task(self.check_inactive_sessions())

@@ -96,7 +96,9 @@ class SaveProfileModal(discord.ui.Modal, title="캐릭터 이름 정하기"):
 class SaveProfileView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        self.db_file = os.path.join("data", "profiles.db")
+        # database.py에서 정의한 절대 경로를 사용
+        from database import DB_FILE
+        self.db_file = DB_FILE
 
     @discord.ui.button(label="💾 프로필 저장하기", style=discord.ButtonStyle.success, custom_id="save_profile")
     async def save_button(self, interaction: discord.Interaction, button: discord.ui.Button):
