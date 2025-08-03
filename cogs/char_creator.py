@@ -74,6 +74,7 @@ class CharCreator(commands.Cog):
 
     async def start_session(self, interaction: discord.Interaction, worldview: str):
         """실제 캐릭터 생성 세션을 시작하는 내부 함수"""
+        print("[Interaction Trace] Entered start_session.")
         user_id = interaction.user.id
         print(f"[Log] User {user_id} selected worldview '{worldview}' to start session.")
 
@@ -94,13 +95,17 @@ class CharCreator(commands.Cog):
         
         try:
             # 사용자에게 DM으로 안내 메시지 전송
+            print("[Interaction Trace] Attempting to send DM.")
             await interaction.user.send(f"'{worldview}' 세계관으로 캐릭터 생성을 시작합니다! DM으로 저와 자유롭게 대화하며 캐릭터를 만들어보세요. 대화를 마치고 싶으시면 언제든지 `/quit`을 입력해주세요.")
+            print("[Interaction Trace] DM sent successfully. Attempting to edit original response.")
             # 원래 상호작용에는 확인 메시지 수정
             # Since the original interaction was deferred, we edit it.
             await interaction.edit_original_response(content="캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", view=None)
+            print("[Interaction Trace] Original response edited successfully.")
             print(f"[Log] DM sent to user {user_id} to start session.")
         except discord.Forbidden:
             print(f"[Log] Cannot send DM to user {user_id}. Deleting session.")
+            traceback.print_exc()
             # Edit the original response to inform the user.
             await interaction.edit_original_response(content="DM을 보낼 수 없습니다. 봇의 DM을 허용해주세요.", view=None)
             if user_id in active_sessions:
@@ -124,11 +129,15 @@ class CharCreator(commands.Cog):
         try:
             if interaction.type == discord.InteractionType.component:
                 custom_id = interaction.data.get("custom_id")
+                print(f"[Interaction Trace] Received component interaction with custom_id: {custom_id}")
                 if custom_id == "start_worldview_select":
+                    print("[Interaction Trace] Matched 'start_worldview_select'. Deferring response.")
                     # Defer the interaction first to prevent timeouts
                     await interaction.response.defer(thinking=True, ephemeral=True)
+                    print("[Interaction Trace] Response deferred. Preparing to start session.")
                     selected_worldview = interaction.data['values'][0]
                     await self.start_session(interaction, selected_worldview)
+                    print("[Interaction Trace] start_session call completed.")
         except Exception as e:
             print(f"on_interaction 처리 중 오류 발생: {e}")
             traceback.print_exc()
