@@ -35,7 +35,10 @@ async def on_ready():
 
 async def load_cogs():
     """cogs 폴더에서 모든 cog를 로드합니다."""
-    cogs_path = './cogs'
+    # 스크립트의 현재 위치를 기준으로 cogs 폴더 경로를 설정합니다.
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    cogs_path = os.path.join(script_dir, 'cogs')
+    
     for filename in os.listdir(cogs_path):
         if filename.endswith('.py') and filename != 'ui_elements.py':
             try:
