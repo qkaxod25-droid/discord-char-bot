@@ -22,6 +22,7 @@ genai.configure(api_key=GEMINI_API_KEY)
 # 봇 인텐트 설정
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 
 # 봇 객체 생성
 bot = commands.Bot(command_prefix='/', intents=intents)
