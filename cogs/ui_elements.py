@@ -1,11 +1,14 @@
 import discord
 import sqlite3
-import os
+import time
+import traceback
+from database import DB_FILE
+
+# --- Modals (팝업 창) ---
 
 class WorldviewEditModal(discord.ui.Modal, title="세계관 설명 수정"):
-    def __init__(self, db_file: str, worldview_name: str, current_description: str):
+    def __init__(self, worldview_name: str, current_description: str):
         super().__init__()
-        self.db_file = db_file
         self.worldview_name = worldview_name
         self.description_input = discord.ui.TextInput(
             label=f"'{worldview_name}'의 새로운 설명",
@@ -18,190 +21,138 @@ class WorldviewEditModal(discord.ui.Modal, title="세계관 설명 수정"):
 
     async def on_submit(self, interaction: discord.Interaction):
         new_description = self.description_input.value
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
         try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
             cursor.execute("UPDATE worldviews SET description = ? WHERE name = ?", (new_description, self.worldview_name))
             conn.commit()
+            conn.close()
             await interaction.response.send_message(f"✅ '{self.worldview_name}' 세계관의 설명이 성공적으로 수정되었습니다.", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"❌ 오류: 설명을 수정하는 중 문제가 발생했습니다: {e}", ephemeral=True)
-        finally:
-            conn.close()
 
-class ProfileEditModal(discord.ui.Modal, title="프로필 수정"):
-    def __init__(self, db_file: str, profile_name: str, current_data: str):
-        super().__init__()
-        self.db_file = db_file
-        self.profile_name = profile_name
-        self.profile_data_input = discord.ui.TextInput(
-            label=f"'{profile_name}'의 프로필 내용",
-            style=discord.TextStyle.paragraph,
-            default=current_data,
-            required=True
-        )
-        self.add_item(self.profile_data_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        new_data = self.profile_data_input.value
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        try:
-            cursor.execute("UPDATE profiles SET profile_data = ? WHERE user_id = ? AND character_name = ?", (new_data, interaction.user.id, self.profile_name))
-            conn.commit()
-            await interaction.response.send_message(f"✅ '{self.profile_name}' 프로필이 성공적으로 수정되었습니다.", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"❌ 오류: 프로필을 수정하는 중 문제가 발생했습니다: {e}", ephemeral=True)
-        finally:
-            conn.close()
-
-class SaveProfileModal(discord.ui.Modal, title="캐릭터 이름 정하기"):
-    character_name = discord.ui.TextInput(
-        label="캐릭터의 이름을 입력하세요",
-        placeholder="예: 아서 펜드래건",
-        required=True,
-        max_length=50
-    )
-
-    def __init__(self, db_file: str):
-        super().__init__()
-        self.db_file = db_file
-
-    async def on_submit(self, interaction: discord.Interaction):
-        user_id = interaction.user.id
-        profile_info = interaction.client.last_generated_profiles.get(user_id)
-
-        if not profile_info:
-            await interaction.response.send_message("저장할 프로필 정보를 찾을 수 없습니다. 다시 생성해주세요.", ephemeral=True)
-            return
-
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                "INSERT INTO profiles (user_id, character_name, profile_data, worldview_name) VALUES (?, ?, ?, ?)",
-                (user_id, self.character_name.value, profile_info['profile_data'], profile_info['worldview_name'])
-            )
-            conn.commit()
-            await interaction.response.send_message(f"✅ 캐릭터 '{self.character_name.value}'(이)가 성공적으로 저장되었습니다!", ephemeral=True)
-            if user_id in interaction.client.last_generated_profiles:
-                del interaction.client.last_generated_profiles[user_id]
-        except sqlite3.IntegrityError:
-            await interaction.response.send_message("오류: 이미 같은 이름의 캐릭터가 존재합니다.", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"저장 중 오류가 발생했습니다: {e}", ephemeral=True)
-        finally:
-            conn.close()
-
-class SaveProfileView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        # database.py에서 정의한 절대 경로를 사용
-        from database import DB_FILE
-        self.db_file = DB_FILE
-
-    @discord.ui.button(label="💾 프로필 저장하기", style=discord.ButtonStyle.success, custom_id="save_profile")
-    async def save_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = SaveProfileModal(self.db_file)
-        await interaction.response.send_modal(modal)
+# --- Views (버튼, 드롭다운 메뉴) ---
 
 class WorldviewSelectView(discord.ui.View):
-    def __init__(self, cog, worldviews: list):
+    """
+    [REWRITE V2] 세계관 선택을 위한 View.
+    생성 시 콜백 함수를 받아, 다양한 상황(시작, 수정, 보기)에 재사용 가능하도록 설계.
+    """
+    def __init__(self, worldviews: list, callback_func):
         super().__init__(timeout=180)
-        self.cog = cog  # CharCreator 코그의 인스턴스
-        
+        self.callback_func = callback_func
         options = [discord.SelectOption(label=name) for name in worldviews]
-        
-        # Select 메뉴에 콜백 함수를 직접 연결
-        self.select = discord.ui.Select(
-            placeholder="세계관을 선택하세요...",
+        self.select_menu = discord.ui.Select(
+            placeholder="원하는 세계관을 선택하세요...",
             options=options,
-            custom_id="start_worldview_select" # custom_id는 유지
+            custom_id="generic_worldview_select"
         )
-        self.select.callback = self.select_callback
-        self.add_item(self.select)
+        self.select_menu.callback = self.on_select
+        self.add_item(self.select_menu)
 
-    async def select_callback(self, interaction: discord.Interaction):
-        """사용자가 세계관을 선택했을 때 호출되는 콜백"""
-        # 로직을 View 내부에서 직접 처리
-        await interaction.response.defer(thinking=True, ephemeral=True)
-
-        user_id = interaction.user.id
-        worldview = self.select.values[0]
-
-        if user_id in self.cog.active_sessions:
-            await interaction.followup.send("이미 진행 중인 캐릭터 생성 세션이 있습니다. 새로 시작하려면 먼저 `/quit`을 입력해주세요.", ephemeral=True)
-            return
-
-        # 세션 시작
-        self.cog.active_sessions[user_id] = {
-            "worldview": worldview,
-            "messages": [],
-            "last_message_time": time.time(),
-            "timeout_notified": False
-        }
-        
-        try:
-            # DM 전송
-            await interaction.user.send(f"'{worldview}' 세계관으로 캐릭터 생성을 시작합니다! DM으로 저와 자유롭게 대화하며 캐릭터를 만들어보세요. 대화를 마치고 싶으시면 언제든지 `/quit`을 입력해주세요.")
-            
-            # 후속 응답 전송
-            await interaction.followup.send(content="캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", ephemeral=True)
-
-        except discord.Forbidden:
-            await interaction.followup.send(content="DM을 보낼 수 없습니다. 서버 설정에서 '서버 멤버가 보내는 다이렉트 메시지 허용'을 켜주세요.", ephemeral=True)
-            if user_id in self.cog.active_sessions:
-                del self.cog.active_sessions[user_id]
-        except Exception as e:
-            print(f"[Log] An unexpected error occurred in select_callback for user {user_id}: {e}")
-            traceback.print_exc()
-            await interaction.followup.send(content="세션 시작 중 예상치 못한 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
-            if user_id in self.cog.active_sessions:
-                del self.cog.active_sessions[user_id]
+    async def on_select(self, interaction: discord.Interaction):
+        # View를 생성할 때 전달받은 콜백 함수를 실행
+        await self.callback_func(self, interaction)
 
 class ProfileSelectView(discord.ui.View):
+    """
+    [REWRITE] 프로필 선택을 위한 View.
+    선택 시 ProfileManageView를 보여줌.
+    """
     def __init__(self, profiles: list):
         super().__init__(timeout=180)
-
         options = [discord.SelectOption(label=name) for name in profiles]
-        self.select = discord.ui.Select(placeholder="캐릭터를 선택하세요...", options=options, custom_id="profile_select")
-        self.add_item(self.select)
+        self.select_menu = discord.ui.Select(
+            placeholder="관리할 캐릭터 프로필을 선택하세요...",
+            options=options,
+            custom_id="profile_select_v2"
+        )
+        self.select_menu.callback = self.on_select
+        self.add_item(self.select_menu)
+
+    async def on_select(self, interaction: discord.Interaction):
+        selected_profile = self.select_menu.values[0]
+        # 응답을 수정하여, 선택된 프로필에 대한 관리 버튼(View)을 보여줌
+        await interaction.response.edit_message(
+            content=f"**{selected_profile}** 프로필에 대해 무엇을 할까요?",
+            view=ProfileManageView(selected_profile)
+        )
 
 class ProfileManageView(discord.ui.View):
+    """
+    [REWRITE] 선택된 프로필을 관리(확인/수정/삭제)하기 위한 버튼 View.
+    """
     def __init__(self, profile_name: str):
         super().__init__(timeout=180)
         self.profile_name = profile_name
 
-    @discord.ui.button(label="📜 프로필 확인", style=discord.ButtonStyle.secondary, custom_id="view_profile")
+    async def _get_profile_data(self, user_id: int) -> str | None:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT profile_data FROM profiles WHERE user_id = ? AND character_name = ?", (user_id, self.profile_name))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None
+
+    @discord.ui.button(label="📜 프로필 확인", style=discord.ButtonStyle.secondary)
     async def view_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # 이 버튼의 로직은 profile_manager.py의 on_interaction에서 처리됩니다.
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
+        profile_data = await self._get_profile_data(interaction.user.id)
+        if profile_data:
+            embed = discord.Embed(title=f"📜 프로필: {self.profile_name}", description=profile_data, color=discord.Color.green())
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await interaction.followup.send("프로필을 찾을 수 없습니다.", ephemeral=True)
 
-    @discord.ui.button(label="✏️ 프로필 수정", style=discord.ButtonStyle.primary, custom_id="edit_profile")
+    @discord.ui.button(label="✏️ 프로필 수정", style=discord.ButtonStyle.primary)
     async def edit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # 이 버튼의 로직은 profile_manager.py의 on_interaction에서 처리됩니다.
-        await interaction.response.defer()
+        # 이 버튼은 현재 비활성화 상태입니다. 향후 프로필 수정 모달을 연결할 수 있습니다.
+        button.disabled = True
+        await interaction.response.send_message("프로필 수정 기능은 현재 준비 중입니다.", ephemeral=True)
 
-class WorldviewConfirmEditView(discord.ui.View):
-    def __init__(self, db_file: str, worldview_name: str, description: str):
+# --- Char Creator 전용 View ---
+
+class CharCreatorWorldviewSelectView(discord.ui.View):
+    """
+    [REWRITE] 캐릭터 생성(/start) 전용 세계관 선택 View.
+    """
+    def __init__(self, worldviews: list):
         super().__init__(timeout=180)
-        self.db_file = db_file
-        self.worldview_name = worldview_name
-        self.description = description
+        options = [discord.SelectOption(label=name) for name in worldviews]
+        self.select_menu = discord.ui.Select(
+            placeholder="캐릭터를 생성할 세계관을 선택하세요...",
+            options=options,
+            custom_id="start_worldview_select_v3"
+        )
+        self.select_menu.callback = self.on_select
+        self.add_item(self.select_menu)
 
-    @discord.ui.button(label="✏️ 수정하기", style=discord.ButtonStyle.primary, custom_id="confirm_worldview_edit")
-    async def confirm_edit(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = WorldviewEditModal(self.db_file, self.worldview_name, self.description)
-        await interaction.response.send_modal(modal)
+    async def on_select(self, interaction: discord.Interaction):
+        try:
+            await interaction.response.defer(thinking=True, ephemeral=True)
+            bot = interaction.client
+            user_id = interaction.user.id
+            selected_worldview = self.select_menu.values[0]
 
-class ProfileConfirmEditView(discord.ui.View):
-    def __init__(self, db_file: str, profile_name: str, profile_data: str):
-        super().__init__(timeout=180)
-        self.db_file = db_file
-        self.profile_name = profile_name
-        self.profile_data = profile_data
+            if user_id in bot.active_sessions:
+                await interaction.followup.send("이미 진행 중인 세션이 있습니다. `/quit`으로 종료 후 다시 시도해주세요.", ephemeral=True)
+                return
 
-    @discord.ui.button(label="✏️ 수정하기", style=discord.ButtonStyle.primary, custom_id="confirm_profile_edit")
-    async def confirm_edit(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = ProfileEditModal(self.db_file, self.profile_name, self.profile_data)
-        await interaction.response.send_modal(modal)
+            bot.active_sessions[user_id] = {
+                "worldview": selected_worldview,
+                "messages": [],
+                "last_message_time": time.time()
+            }
+            
+            await interaction.user.send(f"'{selected_worldview}' 세계관으로 캐릭터 생성을 시작합니다! DM으로 대화해주세요.")
+            await interaction.followup.send("캐릭터 생성 세션을 시작했습니다. DM을 확인해주세요!", ephemeral=True)
+
+        except discord.Forbidden:
+            await interaction.followup.send("DM을 보낼 수 없습니다. 서버의 DM 설정을 확인해주세요.", ephemeral=True)
+            if user_id in interaction.client.active_sessions:
+                del interaction.client.active_sessions[user_id]
+        except Exception as e:
+            traceback.print_exc()
+            await interaction.followup.send("세션 시작 중 오류가 발생했습니다.", ephemeral=True)
+            if user_id in interaction.client.active_sessions:
+                del interaction.client.active_sessions[user_id]

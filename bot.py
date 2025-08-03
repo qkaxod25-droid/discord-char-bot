@@ -26,6 +26,8 @@ intents.members = True
 
 # 봇 객체 생성
 bot = commands.Bot(command_prefix='/', intents=intents)
+# 세션 및 프로필 데이터를 봇 객체에서 중앙 관리
+bot.active_sessions = {}
 bot.last_generated_profiles = {} # key: user_id, value: {worldview_name, profile_data}
 bot.persistent_views_added = False
 
@@ -47,8 +49,9 @@ async def load_cogs():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     cogs_path = os.path.join(script_dir, 'cogs')
     
+    # [RESTORED] cogs 폴더에서 모든 cog를 로드합니다.
     for filename in os.listdir(cogs_path):
-        if filename.endswith('.py') and filename != 'ui_elements.py':
+        if filename.endswith('.py') and not filename.startswith('__'):
             try:
                 await bot.load_extension(f'cogs.{filename[:-3]}')
                 print(f'{filename}을(를) 로드했습니다.')
