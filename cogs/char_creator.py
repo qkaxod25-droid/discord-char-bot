@@ -188,5 +188,5 @@ Here is the detailed setting for the world:
                         await message.channel.send("죄송합니다, 아이디어를 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
 
 
-async def setup(bot: commands._Bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(CharCreator(bot))
